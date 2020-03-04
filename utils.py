@@ -16,6 +16,64 @@ from torchvision.utils import make_grid
 from skimage.draw import circle
 from sklearn import metrics
 
+def get_nparams(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+def get_predictions(output):
+    '''
+    Parameters
+    ----------
+    output : torch.tensor
+        [B, C, *] tensor. Returns the argmax for one-hot encodings.
+
+    Returns
+    -------
+    indices : torch.tensor
+        [B, *] tensor.
+
+    '''
+    bs,c,h,w = output.size()
+    values, indices = output.cpu().max(1)
+    indices = indices.view(bs,h,w) # bs x h x w
+    return indices
+
+class Logger():
+    def __init__(self, output_name):
+        dirname = os.path.dirname(output_name)
+        if not os.path.exists(dirname):
+            os.mkdir(dirname)
+        self.dirname = dirname
+        self.log_file = open(output_name, 'a+')
+        self.infos = {}
+
+    def append(self, key, val):
+        vals = self.infos.setdefault(key, [])
+        vals.append(val)
+
+    def log(self, extra_msg=''):
+        msgs = [extra_msg]
+        for key, vals in self.infos.iteritems():
+            msgs.append('%s %.6f' % (key, np.mean(vals)))
+        msg = '\n'.join(msgs)
+        self.log_file.write(msg + '\n')
+        self.log_file.flush()
+        self.infos = {}
+        return msg
+
+    def write_silent(self, msg):
+        self.log_file.write(msg + '\n')
+        self.log_file.flush()
+
+    def write(self, msg):
+        self.log_file.write(msg + '\n')
+        self.log_file.flush()
+        #print (msg)
+    def write_summary(self,msg):
+        self.log_file.write(msg)
+        self.log_file.write('\n')
+        self.log_file.flush()
+        #print (msg
+
 def getSeg_metrics(y_true, y_pred, cond):
     '''
     Iterate over each batch and identify which classes are present. If no

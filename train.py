@@ -11,15 +11,12 @@ import matplotlib.pyplot as plt
 
 from args import parse_args
 from modelSummary import model_dict
+from pytorchtools import EarlyStopping
 from tensorboardX import SummaryWriter
-from utils import getSeg_metrics, getPoint_metric, generateImageGrid, unnormPts
-
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
-
 from torch.utils.data import DataLoader
-from RITEyes_helper.helperfunctions import mypause, linVal
-from RITEyes_helper.pytorchtools import EarlyStopping
-from RITEyes_helper.utils import get_nparams, Logger, get_predictions
+from helperfunctions import mypause, linVal
+from utils import get_nparams, Logger, get_predictions
+from utils import getSeg_metrics, getPoint_metric, generateImageGrid, unnormPts
 
 #%%
 
