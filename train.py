@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import sys
 import tqdm
 import torch
 import pickle
@@ -12,6 +13,8 @@ from args import parse_args
 from modelSummary import model_dict
 from tensorboardX import SummaryWriter
 from utils import getSeg_metrics, getPoint_metric, generateImageGrid, unnormPts
+
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from torch.utils.data import DataLoader
 from RITEyes_helper.helperfunctions import mypause, linVal
