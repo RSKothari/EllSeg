@@ -6,15 +6,53 @@ Created on Mon Mar  2 15:17:32 2020
 @author: rakshit
 """
 
-# This file contains definitions which are not available for regular scenarios.
-# For general purposes functions, classes and operations - please use RITEyes.
+# This file contains definitions which are not applicable in regular scenarios.
+# For general purposes functions, classes and operations - please use helperfunctions.
+import os
+import tqdm
 import copy
 import torch
 import numpy as np
 
 from torchvision.utils import make_grid
 from skimage.draw import circle
+from typing import Optional
 from sklearn import metrics
+
+def create_meshgrid(
+        height: int,
+        width: int,
+        normalized_coordinates: Optional[bool] = True) -> torch.Tensor:
+    """Generates a coordinate grid for an image.
+
+    When the flag `normalized_coordinates` is set to True, the grid is
+    normalized to be in the range [-1,1] to be consistent with the pytorch
+    function grid_sample.
+    http://pytorch.org/docs/master/nn.html#torch.nn.functional.grid_sample
+
+    Args:
+        height (int): the image height (rows).
+        width (int): the image width (cols).
+        normalized_coordinates (Optional[bool]): whether to normalize
+          coordinates in the range [-1, 1] in order to be consistent with the
+          PyTorch function grid_sample.
+
+    Return:
+        torch.Tensor: returns a grid tensor with shape :math:`(1, H, W, 2)`.
+    """
+    # generate coordinates
+    xs: Optional[torch.Tensor] = None
+    ys: Optional[torch.Tensor] = None
+    if normalized_coordinates:
+        xs = torch.linspace(-1, 1, width)
+        ys = torch.linspace(-1, 1, height)
+    else:
+        xs = torch.linspace(0, width - 1, width)
+        ys = torch.linspace(0, height - 1, height)
+    # generate grid by stacking coordinates
+    base_grid: torch.Tensor = torch.stack(
+        torch.meshgrid([xs, ys])).transpose(1, 2)  # 2xHxW
+    return torch.unsqueeze(base_grid, dim=0).permute(0, 2, 3, 1)  # 1xHxWx2
 
 def get_nparams(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -67,17 +105,19 @@ class Logger():
     def write(self, msg):
         self.log_file.write(msg + '\n')
         self.log_file.flush()
-        #print (msg)
+        print (msg)
     def write_summary(self,msg):
         self.log_file.write(msg)
         self.log_file.write('\n')
         self.log_file.flush()
-        #print (msg
+        print (msg)
 
 def getSeg_metrics(y_true, y_pred, cond):
     '''
     Iterate over each batch and identify which classes are present. If no
     class is present, i.e. all 0, then ignore that score from the average.
+    Note: This function computes the nan mean. This is because datasets may not
+    have all classes present.
     '''
     cond = cond.astype(np.bool)
     B = y_true.shape[0]
@@ -97,31 +137,35 @@ def getSeg_metrics(y_true, y_pred, cond):
         score_list.append(score_vals)
     score_list = np.stack(score_list, axis=0)
     score_list = score_list[~cond[:, 1], :] # Only select valid entries
-    meanIOU = np.mean(np.mean(score_list, axis=1))
-    perClassIOU = np.mean(score_list, axis=0)
+    perClassIOU = np.nanmean(score_list, axis=0) if len(score_list) > 0 else np.nan*np.ones(3, )
+    meanIOU = np.nanmean(perClassIOU) if len(score_list) > 0 else np.nan
     return meanIOU, perClassIOU
 
-def getPoint_metric(y_true, y_pred, cond):
+def getPoint_metric(y_true, y_pred, cond, sz, do_unnorm):
+    # Unnormalize predicted points
+    if do_unnorm:
+        y_pred = unnormPts(y_pred, sz)
+    
     cond = cond.astype(np.bool)
     flag = (~cond[:, 0]).astype(np.float)
     dist = metrics.pairwise_distances(y_true, y_pred, metric='euclidean')
     dist = flag*np.diag(dist)
-    return np.sum(dist)/np.sum(flag)
+    return np.sum(dist)/np.sum(flag) if np.any(flag) else np.nan
 
-def generateImageGrid(I, mask, pupil_center, cond):
+def generateImageGrid(I, mask, pupil_center, cond, override=False):
     I_o = []
     for i in range(0, cond.shape[0]):
         im = I[i, ...].squeeze()
         im = np.stack([im for i in range(0, 3)], axis=2)
         
-        if not cond[i, 1]:
+        if (not cond[i, 1]) or override:
             # If masks exists
             rr, cc = np.where(mask[i, ...] == 1)
             im[rr, cc, ...] = np.array([1, -1, -1]) # Red
             rr, cc = np.where(mask[i, ...] == 2)
             im[rr, cc, ...] = np.array([1, -1, 1])
         
-        if not cond[i, 0]:
+        if (not cond[i, 0]) or override:
             # If pupil center exists
             rr, cc = circle(pupil_center[i, 1].clip(5, im.shape[1]-5),
                             pupil_center[i, 0].clip(5, im.shape[0]-5),
@@ -146,3 +190,54 @@ def unnormPts(pts, sz):
     pts_o[:, 0] = 0.5*sz[1]*(pts_o[:, 0] + 1)
     pts_o[:, 1] = 0.5*sz[0]*(pts_o[:, 1] + 1)
     return pts_o
+
+def lossandaccuracy(args, loader, model, alpha, device):
+    '''
+    A function to compute validation loss and performance
+
+    Parameters
+    ----------
+    loader : torch loader
+        Custom designed loader found in the helper functions.
+    model : torch net
+        Initialized model which needs to be validated againt loader.
+    alpha : Learning rate factor. Refer to RITNet paper for more information.
+        constant.
+
+    Returns
+    -------
+    TYPE
+        validation score.
+
+    '''
+    epoch_loss = []
+    ious = []
+    dists = []
+    model.eval()
+    with torch.no_grad():
+        for bt, batchdata in enumerate(tqdm.tqdm(loader)):
+            img, labels, spatialWeights, distMap, pupil_center, cond = batchdata
+            output, pred_center, loss = model(img.to(device).to(args.prec),
+                                                labels.to(device).long(),
+                                                pupil_center.to(device).to(args.prec),
+                                                spatialWeights.to(device).to(args.prec),
+                                                distMap.to(device).to(args.prec),
+                                                cond.to(device).to(args.prec),
+                                                alpha)
+            loss = loss.mean()
+            epoch_loss.append(loss.item())
+            
+            ptDist = getPoint_metric(pupil_center.numpy(),
+                                     pred_center.detach().cpu().numpy(),
+                                     cond.numpy(),
+                                     img.shape[2:],
+                                     True) # Unnormalizes the points
+            dists.append(ptDist)
+            
+            predict = get_predictions(output)
+            iou = getSeg_metrics(labels.numpy(),
+                                 predict.numpy(),
+                                 cond.numpy())[1]
+            ious.append(iou)
+    ious = np.stack(ious, axis=0)
+    return np.mean(epoch_loss), np.nanmean(ious, 0), dists

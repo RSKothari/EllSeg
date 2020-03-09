@@ -57,7 +57,7 @@ class EarlyStopping:
             self.counter = 0
 
     def save_checkpoint(self, val_loss, model_dict):
-        '''Saves model when validation loss decrease.'''
+        '''Saves model when validation loss decreases.'''
         if self.verbose and self.mode == 'min':
             print('Validation metric decreased ({:.6f} --> {:.6f}).  Saving model ...'.format(self.val_loss_min, val_loss))
         elif self.verbose and self.mode == 'max':

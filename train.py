@@ -3,7 +3,6 @@
 
 import os
 import sys
-import tqdm
 import torch
 import pickle
 import numpy as np
@@ -15,53 +14,10 @@ from pytorchtools import EarlyStopping
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 from helperfunctions import mypause, linVal
-from utils import get_nparams, Logger, get_predictions
+from utils import get_nparams, Logger, get_predictions, lossandaccuracy
 from utils import getSeg_metrics, getPoint_metric, generateImageGrid, unnormPts
 
-#%%
-
-def lossandaccuracy(args, loader, model, factor):
-    '''
-    A function to compute validation loss and performance
-
-    Parameters
-    ----------
-    loader : torch loader
-        Custom designed loader found in the helper functions.
-    model : torch net
-        Initialized model which needs to be validated againt loader.
-    factor : Learning rate factor. Refer to RITNet paper for more information.
-        constant.
-
-    Returns
-    -------
-    TYPE
-        validation score.
-
-    '''
-    epoch_loss = []
-    ious = []
-    model.eval()
-    with torch.no_grad():
-        for bt, batchdata in enumerate(loader):
-            img, labels, spatialWeights, distMap, pupil_center, cond = batchdata
-            output, pred_center, loss = model(img.to(device).to(args.prec),
-                                                labels.to(device).long(),
-                                                pupil_center.to(device).to(args.prec),
-                                                spatialWeights.to(device).to(args.prec),
-                                                distMap.to(device).to(args.prec),
-                                                cond.to(device).to(args.prec),
-                                                alpha)
-            loss = loss.mean()
-            epoch_loss.append(loss.item())
-            
-            predict = get_predictions(output)
-            iou = getSeg_metrics(labels.numpy(),
-                                 predict.numpy(),
-                                 cond.numpy())[1]
-            ious.append(iou)
-    ious = np.stack(ious, axis=0)
-    return np.mean(epoch_loss), np.mean(np.mean(ious, 1))
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 #%%
 if __name__ == '__main__':
@@ -103,7 +59,7 @@ if __name__ == '__main__':
         filename = args.loadfile
         if not os.path.exists(filename):
             print("model path not found!")
-            exit(1)
+            sys.exit(1)
         netDict = torch.load(filename)
         model.load_state_dict(netDict['state_dict'])
         startEp = netDict['epoch'] if 'epoch' in netDict.keys() else 0
@@ -122,7 +78,8 @@ if __name__ == '__main__':
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=5) # Default factor = 0.1
 
     patience = 10
-    early_stopping = EarlyStopping(delta=1e-3,
+    early_stopping = EarlyStopping(mode='min',
+                                   delta=1e-2,
                                    verbose=True,
                                    patience=patience,
                                    fName='checkpoint.pt',
@@ -149,13 +106,15 @@ if __name__ == '__main__':
 
     if args.disp:
         fig, axs = plt.subplots(nrows=1, ncols=1)
-    
+    #%%
     for epoch in range(startEp, args.epochs):
+        accLoss = 0.0
         ious = []
+        dists = []
         model.train()
         alpha = linVal(epoch, (0, args.epochs), (0, 1), 0)
         
-        for bt, batchdata in enumerate(tqdm.tqdm(trainloader)):
+        for bt, batchdata in enumerate(trainloader):
             img, labels, spatialWeights, distMap, pupil_center, cond = batchdata
             optimizer.zero_grad()
 
@@ -170,14 +129,19 @@ if __name__ == '__main__':
             loss = loss if args.useMultiGPU else loss.mean()
             loss.backward()
             optimizer.step()
+            torch.cuda.empty_cache() # Clear cache for unused nodes
 
+            accLoss += loss.detach().cpu().item()
             predict = get_predictions(output)
             iou = getSeg_metrics(labels.numpy(),
                                  predict.numpy(),
                                  cond.numpy())[1]
             ptDist = getPoint_metric(pupil_center.numpy(),
                                      pred_center.detach().cpu().numpy(),
-                                     cond.numpy())
+                                     cond.numpy(),
+                                     img.shape[2:],
+                                     True) # Unnormalizes the points
+            dists.append(ptDist)
             ious.append(iou)
             
             if args.disp:
@@ -186,8 +150,9 @@ if __name__ == '__main__':
                 dispI = generateImageGrid(img.numpy(),
                                           predict.numpy(),
                                           pup_c,
-                                          cond.numpy())
-                if (epoch == 0) and (bt == 0):
+                                          cond.numpy(),
+                                          override=True)
+                if (epoch == startEp) and (bt == 0):
                     h_im = plt.imshow(dispI.permute(1, 2, 0))
                     plt.pause(0.01)
                 else:
@@ -201,28 +166,48 @@ if __name__ == '__main__':
                                                                      loss.item()))
 
         ious = np.stack(ious, axis=0)
-        ious = np.mean(ious, axis=0)
-        logger.write('Epoch:{}, Train mIoU: {}'.format(epoch, ious))
-        lossvalid, miou = lossandaccuracy(args, validloader, model, alpha)
+        ious = np.nanmean(ious, axis=0)
+        logger.write('Epoch:{}, Train IoU: {}'.format(epoch, ious))
+        
+        # Add info to tensorboard
+        writer.add_scalar('train/loss', accLoss/bt, epoch)
+        writer.add_scalars('train/pup_dst', {'mu':np.nanmean(dists),
+                                             'std':np.nanstd(dists)}, epoch)
+        writer.add_scalars('train/iou', {'mIOU':np.mean(ious),
+                                         'bG':ious[0],
+                                         'iris':ious[1],
+                                         'pupil':ious[2]}, epoch)
+        
+        lossvalid, ious, dists = lossandaccuracy(args, validloader, model, alpha, device)
+        
+        # Add valid info to tensorboard
+        writer.add_scalar('valid/loss', lossvalid, epoch)
+        writer.add_scalars('valid/pup_dst', {'mu':np.nanmean(dists),
+                                             'std':np.nanstd(dists)}, epoch)
+        writer.add_scalars('valid/iou', {'mIOU':np.mean(ious),
+                                         'bG':ious[0],
+                                         'iris':ious[1],
+                                         'pupil':ious[2]}, epoch)
         
         for name, param in model.named_parameters():
             writer.add_histogram(name, param.clone().cpu().data.numpy(), epoch)
 
-        f = 'Epoch:{}, Valid Loss: {:.3f} mIoU: {}'
-        logger.write(f.format(epoch, lossvalid, miou))
+        f = 'Epoch:{}, Valid Loss: {:.3f}, mIoU: {}'
+        logger.write(f.format(epoch, lossvalid, np.mean(ious)))
 
         scheduler.step(lossvalid)
         early_stopping(lossvalid, model.state_dict() if not args.useMultiGPU else model.module.state_dict())
         
+        netDict = {'state_dict':[], 'epoch': epoch}
+        netDict['state_dict'] = model.state_dict() if not args.useMultiGPU else model.module.state_dict()
+            
         if early_stopping.early_stop:
-            netDict = {'state_dict':[], 'epoch': epoch}
-            netDict['state_dict'] = model.state_dict() if not args.useMultiGPU else model.module.state_dict()
             torch.save(netDict, os.path.join(path2model, args.model + 'earlystop_{}.pkl'.format(epoch)))
             print("Early stopping")
             break
 
         ##save the model every epoch
         if epoch %5 == 0:
-            torch.save(model.state_dict() if not args.useMultiGPU else model.module.state_dict(),
+            torch.save(netDict if not args.useMultiGPU else model.module.state_dict(),
                        os.path.join(path2model, args.model+'_{}.pkl'.format(epoch)))
     writer.close()

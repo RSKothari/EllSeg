@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from utils import normPts
-from loss import get_ptLoss, get_segLoss
+from loss import get_ptLoss, get_segLoss, get_seg2ptLoss
 
 def getSizes(chz, growth, blks=4):
     # This function does not calculate the size requirements for head and tail
@@ -195,7 +195,11 @@ class DenseNet2D(nn.Module):
         # Compute seg losses
         l_seg = get_segLoss(op, target, spatWts, distMap, cond, alpha)
         l_pt = get_ptLoss(pred_c, normPts(pupil_center, target.shape[1:]), cond)
-        loss = l_seg+10*l_pt
+        l_seg2pt, pred_c_seg = get_seg2ptLoss(op[:, -1, ...],
+                                              normPts(pupil_center,
+                                                      target.shape[1:]))
+        
+        loss = l_seg+10*l_pt+l_seg2pt+F.l1_loss(pred_c_seg, pred_c)
         return op, pred_c, loss
     
     def _initialize_weights(self):
