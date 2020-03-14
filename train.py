@@ -47,7 +47,7 @@ if __name__ == '__main__':
     os.makedirs(path2model, exist_ok=True)
     os.makedirs(path2checkpoint, exist_ok=True)
     os.makedirs(path2writer, exist_ok=True)
-    
+
     writer = SummaryWriter(path2writer)
     logger = Logger(os.path.join(LOGDIR,'logs.log'))
 
@@ -65,7 +65,7 @@ if __name__ == '__main__':
         startEp = netDict['epoch'] if 'epoch' in netDict.keys() else 0
     else:
         startEp = 0
-    
+
     model = model if not args.useMultiGPU else torch.nn.DataParallel(model)
     model = model.to(device).to(args.prec)
     torch.save(model.state_dict() if not args.useMultiGPU else model.module.state_dict(),
@@ -111,21 +111,22 @@ if __name__ == '__main__':
         accLoss = 0.0
         ious = []
         dists = []
+        dists_seg = []
         model.train()
         alpha = linVal(epoch, (0, args.epochs), (0, 1), 0)
-        
+
         for bt, batchdata in enumerate(trainloader):
             img, labels, spatialWeights, distMap, pupil_center, cond = batchdata
             optimizer.zero_grad()
 
-            output, pred_center, loss = model(img.to(device).to(args.prec),
-                                              labels.to(device).long(),
-                                              pupil_center.to(device).to(args.prec),
-                                              spatialWeights.to(device).to(args.prec),
-                                              distMap.to(device).to(args.prec),
-                                              cond.to(device).to(args.prec),
-                                              alpha)
-        
+            output, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
+                                                          labels.to(device).long(),
+                                                          pupil_center.to(device).to(args.prec),
+                                                          spatialWeights.to(device).to(args.prec),
+                                                          distMap.to(device).to(args.prec),
+                                                          cond.to(device).to(args.prec),
+                                                          alpha)
+
             loss = loss if args.useMultiGPU else loss.mean()
             loss.backward()
             optimizer.step()
@@ -141,15 +142,23 @@ if __name__ == '__main__':
                                      cond.numpy(),
                                      img.shape[2:],
                                      True) # Unnormalizes the points
+            ptDist_seg = getPoint_metric(pupil_center.numpy(),
+                                         seg_center.detach().cpu().numpy(),
+                                         cond.numpy(),
+                                         img.shape[2:],
+                                         True) # Unnormalizes the points
             dists.append(ptDist)
+            dists_seg.append(ptDist_seg)
             ious.append(iou)
-            
+
             if args.disp:
                 pup_c = unnormPts(pred_center.detach().cpu().numpy(),
                                   img.shape[2:])
+                seg_c = unnormPts(pred_center.detach().cpu().numpy(),
+                                  img.shape[2:])
                 dispI = generateImageGrid(img.numpy(),
                                           predict.numpy(),
-                                          pup_c,
+                                          seg_c,
                                           cond.numpy(),
                                           override=True)
                 if (epoch == startEp) and (bt == 0):
@@ -168,27 +177,32 @@ if __name__ == '__main__':
         ious = np.stack(ious, axis=0)
         ious = np.nanmean(ious, axis=0)
         logger.write('Epoch:{}, Train IoU: {}'.format(epoch, ious))
-        
+
         # Add info to tensorboard
         writer.add_scalar('train/loss', accLoss/bt, epoch)
         writer.add_scalars('train/pup_dst', {'mu':np.nanmean(dists),
                                              'std':np.nanstd(dists)}, epoch)
+        writer.add_scalars('train/seg_dst', {'mu':np.nanmean(dists_seg),
+                                             'std':np.nanstd(dists_seg)}, epoch)
         writer.add_scalars('train/iou', {'mIOU':np.mean(ious),
                                          'bG':ious[0],
                                          'iris':ious[1],
                                          'pupil':ious[2]}, epoch)
-        
-        lossvalid, ious, dists = lossandaccuracy(args, validloader, model, alpha, device)
-        
+
+        lossvalid, ious, dists, dists_seg = lossandaccuracy(args, validloader, model, alpha, device)
+
         # Add valid info to tensorboard
         writer.add_scalar('valid/loss', lossvalid, epoch)
         writer.add_scalars('valid/pup_dst', {'mu':np.nanmean(dists),
                                              'std':np.nanstd(dists)}, epoch)
+        writer.add_scalars('valid/seg_dst', {'mu':np.nanmean(dists_seg),
+                                             'std':np.nanstd(dists_seg)}, epoch)
         writer.add_scalars('valid/iou', {'mIOU':np.mean(ious),
                                          'bG':ious[0],
                                          'iris':ious[1],
                                          'pupil':ious[2]}, epoch)
-        
+        writer.add_image('train/op', dispI, epoch)
+
         for name, param in model.named_parameters():
             writer.add_histogram(name, param.clone().cpu().data.numpy(), epoch)
 
@@ -197,10 +211,10 @@ if __name__ == '__main__':
 
         scheduler.step(lossvalid)
         early_stopping(lossvalid, model.state_dict() if not args.useMultiGPU else model.module.state_dict())
-        
+
         netDict = {'state_dict':[], 'epoch': epoch}
         netDict['state_dict'] = model.state_dict() if not args.useMultiGPU else model.module.state_dict()
-            
+
         if early_stopping.early_stop:
             torch.save(netDict, os.path.join(path2model, args.model + 'earlystop_{}.pkl'.format(epoch)))
             print("Early stopping")

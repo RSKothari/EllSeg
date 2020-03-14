@@ -13,14 +13,14 @@ from loss import get_ptLoss, get_segLoss, get_seg2ptLoss
 
 def getSizes(chz, growth, blks=4):
     # This function does not calculate the size requirements for head and tail
-    
+
     # Encoder sizes
     sizes = {'enc': {'inter':[], 'ip':[], 'op': []},
              'dec': {'skip':[], 'ip': [], 'op': []}}
     sizes['enc']['inter'] = np.array([chz*(i+1) for i in range(0, blks)])
-    sizes['enc']['op'] = np.array([np.int(growth*chz*(i+1)) for i in range(0, blks)]) 
+    sizes['enc']['op'] = np.array([np.int(growth*chz*(i+1)) for i in range(0, blks)])
     sizes['enc']['ip'] = np.array([chz] + [np.int(growth*chz*(i+1)) for i in range(0, blks-1)])
-    
+
     # Decoder sizes
     sizes['dec']['skip'] = sizes['enc']['ip'][::-1] + sizes['enc']['inter'][::-1]
     sizes['dec']['ip'] = sizes['enc']['op'][::-1] #+ sizes['dec']['skip']
@@ -118,7 +118,7 @@ class DenseNet_encoder(nn.Module):
         interSize = sizes['enc']['inter']
         opSize = sizes['enc']['op']
         ipSize = sizes['enc']['ip']
-        
+
         self.head = convBlock(in_c=1,
                                 inter_c=chz,
                                 out_c=chz,
@@ -154,7 +154,7 @@ class DenseNet_encoder(nn.Module):
         skip_3, x = self.down_block3(x) # 4 chz
         skip_4, x = self.down_block4(x) # 8 chz
         return skip_4, skip_3, skip_2, skip_1, x
-        
+
 class DenseNet_decoder(nn.Module):
     def __init__(self, chz, out_c, growth, actfunc=F.leaky_relu, norm=nn.BatchNorm2d):
         super(DenseNet_decoder, self).__init__()
@@ -162,14 +162,14 @@ class DenseNet_decoder(nn.Module):
         skipSize = sizes['dec']['skip']
         opSize = sizes['dec']['op']
         ipSize = sizes['dec']['ip']
-        
+
         self.up_block4 = DenseNet2D_up_block(skipSize[0], ipSize[0], opSize[0], 2, actfunc)
         self.up_block3 = DenseNet2D_up_block(skipSize[1], ipSize[1], opSize[1], 2, actfunc)
         self.up_block2 = DenseNet2D_up_block(skipSize[2], ipSize[2], opSize[2], 2, actfunc)
         self.up_block1 = DenseNet2D_up_block(skipSize[3], ipSize[3], opSize[3], 2, actfunc)
-        
+
         self.final = convBlock(chz, chz, out_c, actfunc)
-    
+
     def forward(self, skip4, skip3, skip2, skip1, x):
          x = self.up_block4(skip4, x)
          x = self.up_block3(skip3, x)
@@ -177,7 +177,7 @@ class DenseNet_decoder(nn.Module):
          x = self.up_block1(skip1, x)
          o = self.final(x)
          return o
-         
+
 class DenseNet2D(nn.Module):
     def __init__(self, chz=32, growth=1.2, actfunc=F.leaky_relu, norm=nn.InstanceNorm2d):
         super(DenseNet2D, self).__init__()
@@ -186,22 +186,22 @@ class DenseNet2D(nn.Module):
         self.dec = DenseNet_decoder(chz=chz, out_c=3, actfunc=actfunc, growth=growth, norm=norm)
         self.bottleneck_lin = centerPts(sizes['enc']['op'][-1])
         self._initialize_weights()
-        
+
     def forward(self, x, target, pupil_center, spatWts, distMap, cond, alpha):
         x4, x3, x2, x1, x = self.enc(x)
         pred_c = self.bottleneck_lin(torch.mean(x, (2, 3)))
         op = self.dec(x4, x3, x2, x1, x)
-        
+
         # Compute seg losses
         l_seg = get_segLoss(op, target, spatWts, distMap, cond, alpha)
         l_pt = get_ptLoss(pred_c, normPts(pupil_center, target.shape[1:]), cond)
         l_seg2pt, pred_c_seg = get_seg2ptLoss(op[:, -1, ...],
                                               normPts(pupil_center,
                                                       target.shape[1:]))
-        
+
         loss = l_seg+10*l_pt+l_seg2pt+F.l1_loss(pred_c_seg, pred_c)
-        return op, pred_c, loss
-    
+        return op, pred_c, pred_c_seg, loss
+
     def _initialize_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
