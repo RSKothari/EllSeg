@@ -19,12 +19,12 @@ def get_seg2ptLoss(op, gtPts, temperature=16):
     wtMap = F.softmax(op.view(B, -1)*temperature, dim=1)
     
     XYgrid = create_meshgrid(H, W, normalized_coordinates=True) # 1xHxWx2
-    xloc = XYgrid[0, :, :, 0].view(-1)
-    yloc = XYgrid[0, :, :, 1].view(-1)
+    xloc = XYgrid[0, :, :, 0].reshape(-1).cuda()
+    yloc = XYgrid[0, :, :, 1].reshape(-1).cuda()
     
     xpos = torch.sum(xloc*wtMap, -1, keepdim=True)
     ypos = torch.sum(yloc*wtMap, -1, keepdim=True)
-    predPts = torch.stack([xpos, ypos], dim=0)
+    predPts = torch.stack([xpos, ypos], dim=1).squeeze()
     loss = F.l1_loss(predPts, gtPts, reduction='mean')
     return loss, predPts
     
