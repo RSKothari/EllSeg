@@ -213,17 +213,18 @@ def lossandaccuracy(args, loader, model, alpha, device):
     epoch_loss = []
     ious = []
     dists = []
+    dists_seg = []
     model.eval()
     with torch.no_grad():
         for bt, batchdata in enumerate(tqdm.tqdm(loader)):
             img, labels, spatialWeights, distMap, pupil_center, cond = batchdata
-            output, pred_center, loss = model(img.to(device).to(args.prec),
-                                                labels.to(device).long(),
-                                                pupil_center.to(device).to(args.prec),
-                                                spatialWeights.to(device).to(args.prec),
-                                                distMap.to(device).to(args.prec),
-                                                cond.to(device).to(args.prec),
-                                                alpha)
+            output, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
+                                                          labels.to(device).long(),
+                                                          pupil_center.to(device).to(args.prec),
+                                                          spatialWeights.to(device).to(args.prec),
+                                                          distMap.to(device).to(args.prec),
+                                                          cond.to(device).to(args.prec),
+                                                          alpha)
             loss = loss.mean()
             epoch_loss.append(loss.item())
             
@@ -232,7 +233,14 @@ def lossandaccuracy(args, loader, model, alpha, device):
                                      cond.numpy(),
                                      img.shape[2:],
                                      True) # Unnormalizes the points
+                                     
+            ptDist_seg = getPoint_metric(seg_center.numpy(),
+                                         pred_center.detach().cpu().numpy(),
+                                         cond.numpy(),
+                                         img.shape[2:],
+                                         True) # Unnormalizes the points                         
             dists.append(ptDist)
+            dists_seg.append(ptDist_seg)
             
             predict = get_predictions(output)
             iou = getSeg_metrics(labels.numpy(),
@@ -240,4 +248,4 @@ def lossandaccuracy(args, loader, model, alpha, device):
                                  cond.numpy())[1]
             ious.append(iou)
     ious = np.stack(ious, axis=0)
-    return np.mean(epoch_loss), np.nanmean(ious, 0), dists
+    return np.mean(epoch_loss), np.nanmean(ious, 0), dists, dists_seg
