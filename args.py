@@ -19,7 +19,7 @@ def parse_precision(prec):
         return torch.float16
     else:
         print('Invalid precision. Reverting to float32.')
-        return torch.float32        
+        return torch.float32
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -30,11 +30,12 @@ def parse_args():
     parser.add_argument('--lr', type=float, default=5e-4, help='learning rate')
     parser.add_argument('--batchsize', type=int, default=12, help='select a batchsize')
     parser.add_argument('--resume', type=int, default=0, help='resume?')
-    parser.add_argument('--loadfile', type=str, default='/home/rakshit/Documents/Python_Scripts/GIW_e2e/logs/ritnet/dev/weights/ritnet_2.pkl', help='load experiment')
+    parser.add_argument('--loadfile', type=str, default='', help='load experiment')
     parser.add_argument('--expname', type=str, default='dev', help='experiment number')
     parser.add_argument('--prec', type=int, default=32, help='precision. 16, 32, 64')
     parser.add_argument('--disp', type=int, default=1, help='display intermediate ouput')
     parser.add_argument('--workers', type=int, default=6, help='number of workers')
+    parser.add_argument('--overfit', type=int, default=0, help='overfit to N batches?')
 
     args = parser.parse_args()
     opt = vars(args)

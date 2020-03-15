@@ -11,10 +11,9 @@ import matplotlib.pyplot as plt
 from args import parse_args
 from modelSummary import model_dict
 from pytorchtools import EarlyStopping
-from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 from helperfunctions import mypause, linVal
-from utils import get_nparams, Logger, get_predictions, lossandaccuracy
+from utils import get_nparams, get_predictions, lossandaccuracy
 from utils import getSeg_metrics, getPoint_metric, generateImageGrid, unnormPts
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
@@ -34,8 +33,8 @@ if __name__ == '__main__':
     torch.backends.cudnn.deterministic=False
 
     if args.model not in model_dict:
-        print ("Model not found.")
-        print ("valid models are: {}".format(list(model_dict.keys())))
+        print("Model not found.")
+        print("valid models are: {}".format(list(model_dict.keys())))
         exit(1)
 
     LOGDIR = os.path.join('logs', args.model, args.expname)
@@ -48,13 +47,10 @@ if __name__ == '__main__':
     os.makedirs(path2checkpoint, exist_ok=True)
     os.makedirs(path2writer, exist_ok=True)
 
-    writer = SummaryWriter(path2writer)
-    logger = Logger(os.path.join(LOGDIR,'logs.log'))
-
     model = model_dict[args.model]
 
-    if args.resume:
-        print ("NOTE resuming training")
+    if args.loadfile:
+        print("NOTE resuming training")
         model  = model.to(device)
         filename = args.loadfile
         if not os.path.exists(filename):
@@ -64,39 +60,17 @@ if __name__ == '__main__':
         model.load_state_dict(netDict['state_dict'])
         startEp = netDict['epoch'] if 'epoch' in netDict.keys() else 0
     else:
+        print('Incorrect file path')
         startEp = 0
 
     model = model if not args.useMultiGPU else torch.nn.DataParallel(model)
     model = model.to(device).to(args.prec)
-    torch.save(model.state_dict() if not args.useMultiGPU else model.module.state_dict(),
-               os.path.join(path2model, args.model+'{}.pkl'.format('_init')))
-
-    nparams = get_nparams(model)
-    print('Total number of trainable parameters: {}\n'.format(nparams))
-
-    optimizer = torch.optim.Adam(model.parameters(), lr = args.lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=5) # Default factor = 0.1
-
-    patience = 10
-    early_stopping = EarlyStopping(mode='min',
-                                   delta=1e-2,
-                                   verbose=True,
-                                   patience=patience,
-                                   fName='checkpoint.pt',
-                                   path2save=path2checkpoint)
 
     f = open(os.path.join('curObjects', 'cond_'+str(args.curObj)+'.pkl'), 'rb')
 
-    trainObj, validObj, _ = pickle.load(f)
-    trainObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
-    validObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
-    trainObj.augFlag = True
-    validObj.augFlag = False
-
-    if args.overfit > 0:
-        # This is a flag to check if architectures work
-        trainObj.imList = trainObj.imList[:args.overfit*args.batchsize]
-        validObj.imList = validObj.imList[:args.overfit*args.batchsize]
+    _, _, testObj = pickle.load(f)
+    testObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
+    testObj.augFlag = False
 
     trainloader = DataLoader(trainObj,
                              batch_size=args.batchsize,
