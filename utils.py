@@ -167,8 +167,8 @@ def generateImageGrid(I, mask, pupil_center, cond, override=False):
         
         if (not cond[i, 0]) or override:
             # If pupil center exists
-            rr, cc = circle(pupil_center[i, 1].clip(5, im.shape[1]-5),
-                            pupil_center[i, 0].clip(5, im.shape[0]-5),
+            rr, cc = circle(pupil_center[i, 1].clip(6, im.shape[0]-6),
+                            pupil_center[i, 0].clip(6, im.shape[1]-6),
                             5)
             im[rr, cc, ...] = 1
         I_o.append(im)
@@ -234,8 +234,8 @@ def lossandaccuracy(args, loader, model, alpha, device):
                                      img.shape[2:],
                                      True) # Unnormalizes the points
                                      
-            ptDist_seg = getPoint_metric(seg_center.numpy(),
-                                         pred_center.detach().cpu().numpy(),
+            ptDist_seg = getPoint_metric(pupil_center.numpy(),
+                                         seg_center.detach().cpu().numpy(),
                                          cond.numpy(),
                                          img.shape[2:],
                                          True) # Unnormalizes the points                         

@@ -151,16 +151,17 @@ if __name__ == '__main__':
             dists_seg.append(ptDist_seg)
             ious.append(iou)
 
+            pup_c = unnormPts(pred_center.detach().cpu().numpy(),
+                              img.shape[2:])
+            seg_c = unnormPts(seg_center.detach().cpu().numpy(),
+                              img.shape[2:])
+            dispI = generateImageGrid(img.numpy(),
+                                      predict.numpy(),
+                                      seg_c,
+                                      cond.numpy(),
+                                      override=True)
+
             if args.disp:
-                pup_c = unnormPts(pred_center.detach().cpu().numpy(),
-                                  img.shape[2:])
-                seg_c = unnormPts(pred_center.detach().cpu().numpy(),
-                                  img.shape[2:])
-                dispI = generateImageGrid(img.numpy(),
-                                          predict.numpy(),
-                                          seg_c,
-                                          cond.numpy(),
-                                          override=True)
                 if (epoch == startEp) and (bt == 0):
                     h_im = plt.imshow(dispI.permute(1, 2, 0))
                     plt.pause(0.01)
