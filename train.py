@@ -77,7 +77,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr = args.lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=5) # Default factor = 0.1
 
-    patience = 10
+    patience = 100
     early_stopping = EarlyStopping(mode='min',
                                    delta=1e-2,
                                    verbose=True,
@@ -162,7 +162,7 @@ if __name__ == '__main__':
                               img.shape[2:])
             dispI = generateImageGrid(img.numpy(),
                                       predict.numpy(),
-                                      seg_c,
+                                      pup_c,
                                       cond.numpy(),
                                       override=True)
 

@@ -161,9 +161,9 @@ def generateImageGrid(I, mask, pupil_center, cond, override=False):
         if (not cond[i, 1]) or override:
             # If masks exists
             rr, cc = np.where(mask[i, ...] == 1)
-            im[rr, cc, ...] = np.array([1, -1, -1]) # Red
+            im[rr, cc, ...] = np.array([-1, 1, -1]) # Red
             rr, cc = np.where(mask[i, ...] == 2)
-            im[rr, cc, ...] = np.array([1, -1, 1])
+            im[rr, cc, ...] = np.array([1, 1, -1])
         
         if (not cond[i, 0]) or override:
             # If pupil center exists

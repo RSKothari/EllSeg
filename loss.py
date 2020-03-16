@@ -11,20 +11,27 @@ import torch.nn.functional as F
 
 from utils import create_meshgrid
 
-def get_seg2ptLoss(op, gtPts, temperature=16):
+def get_seg2ptLoss(op, gtPts, temperature, cond):
     # Custom function to find the pupilary center of mass to detected pupil
     # center
     # op: BXHXW - single channel corresponding to pupil
     B, H, W = op.shape
-    wtMap = F.softmax(op.view(B, -1)*temperature, dim=1)
+    wtMap = F.softmax(op.view(B, -1)*temperature, dim=1) # [B, HXW]
     
+    #cond = (1-cond[:, 1]).to(torch.bool)
     XYgrid = create_meshgrid(H, W, normalized_coordinates=True) # 1xHxWx2
+    
     xloc = XYgrid[0, :, :, 0].reshape(-1).cuda()
     yloc = XYgrid[0, :, :, 1].reshape(-1).cuda()
     
-    xpos = torch.sum(xloc*wtMap, -1, keepdim=True)
-    ypos = torch.sum(yloc*wtMap, -1, keepdim=True)
+    xpos = torch.sum(wtMap*xloc, -1, keepdim=True)
+    ypos = torch.sum(wtMap*yloc, -1, keepdim=True)
     predPts = torch.stack([xpos, ypos], dim=1).squeeze()
+    '''
+    loss = F.l1_loss(predPts[cond, :],
+                     gtPts[cond, :],
+                     reduction='mean')
+    '''
     loss = F.l1_loss(predPts, gtPts, reduction='mean')
     return loss, predPts
     
