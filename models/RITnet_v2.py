@@ -179,9 +179,10 @@ class DenseNet_decoder(nn.Module):
          return o
 
 class DenseNet2D(nn.Module):
-    def __init__(self, chz=32, growth=1.2, actfunc=F.leaky_relu, norm=nn.InstanceNorm2d):
+    def __init__(self, chz=32, growth=1.2, actfunc=F.leaky_relu, norm=nn.InstanceNorm2d, selfCorr=False):
         super(DenseNet2D, self).__init__()
         sizes = getSizes(chz, growth)
+        self.selfCorr = selfCorr
         self.enc = DenseNet_encoder(in_c=1, chz=chz, actfunc=actfunc, growth=growth, norm=norm)
         self.dec = DenseNet_decoder(chz=chz, out_c=3, actfunc=actfunc, growth=growth, norm=norm)
         self.bottleneck_lin = centerPts(sizes['enc']['op'][-1])
@@ -199,7 +200,8 @@ class DenseNet2D(nn.Module):
                                               normPts(pupil_center,
                                                       target.shape[1:]), 1, cond)
 
-        loss = 10*l_seg+l_pt+l_seg2pt#+F.l1_loss(pred_c_seg, pred_c)
+        loss = 10*l_seg+l_pt+l_seg2pt
+        loss = loss+F.l1_loss(pred_c_seg, pred_c) if self.selfCorr else loss
         return op, pred_c, pred_c_seg, loss
 
     def _initialize_weights(self):

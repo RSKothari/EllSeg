@@ -52,6 +52,7 @@ if __name__ == '__main__':
     logger = Logger(os.path.join(LOGDIR,'logs.log'))
 
     model = model_dict[args.model]
+    model.selfCorr = args.selfCorr
 
     if args.resume:
         print ("NOTE resuming training")

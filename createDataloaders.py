@@ -134,7 +134,7 @@ validObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'valid', False, (480, 640
 datasets = ['NVGaze', 'OpenEDS', 'LPW']
 nv_subs1 = ['nvgaze_female_{:02}_public_50K_{}'.format(5, j+1) for j in range(0, 2)]
 nv_subs2 = ['nvgaze_male_{:02}_public_50K_{}'.format(5, j+1) for j in range(0, 2)]
-lpw_subs = ['LPW_{}'.format(i+1) for i in range(18, 22)]
+lpw_subs = ['LPW_{}'.format(i+1) for i in range(16, 22)]
 riteyes_subs = ['riteyes_general_{}'.format(i+1) for i in range(18, 24)]
 subsets = nv_subs1 + nv_subs2 + lpw_subs + ['validation'] + riteyes_subs
 
