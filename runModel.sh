@@ -30,7 +30,7 @@ do
         str+="--curObj=${curObj} --batchsize=${batchsize} --workers=${workers} --prec=32 --epochs=${epochs} "
         str+="--disp=0 --overfit=0 --lr=${lr} --selfCorr=${selfCorr}"
         echo -e $str > command.lock
-        sbatch -J ${baseJobName} -o "rc_log/${baseJobName}.o" -e "rc_log/${baseJobName}.e" --mem=16 --cpus-per-task=9 -p tier3 -A riteyes --gres=gpu:2 -t 5-0:0:0
+        sbatch -J ${baseJobName} -o "rc_log/${baseJobName}.o" -e "rc_log/${baseJobName}.e" --mem=16G --cpus-per-task=9 -p tier3 -A riteyes --gres=gpu:2 -t 4-0:0:0 command.lock
     done
 done
 

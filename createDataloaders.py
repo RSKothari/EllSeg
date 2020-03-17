@@ -131,7 +131,7 @@ trainObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'train', True, (480, 640)
 validObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'valid', False, (480, 640), 0.5)
 
 #%% Test on OpenEDS, NVGaze, LPW, S-General
-datasets = ['NVGaze', 'OpenEDS', 'LPW']
+datasets = ['NVGaze', 'OpenEDS', 'LPW', 'riteyes_general']
 nv_subs1 = ['nvgaze_female_{:02}_public_50K_{}'.format(5, j+1) for j in range(0, 2)]
 nv_subs2 = ['nvgaze_male_{:02}_public_50K_{}'.format(5, j+1) for j in range(0, 2)]
 lpw_subs = ['LPW_{}'.format(i+1) for i in range(16, 22)]

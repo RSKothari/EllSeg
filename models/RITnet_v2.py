@@ -200,8 +200,7 @@ class DenseNet2D(nn.Module):
                                               normPts(pupil_center,
                                                       target.shape[1:]), 1, cond)
 
-        loss = 10*l_seg+l_pt+l_seg2pt
-        loss = loss+F.l1_loss(pred_c_seg, pred_c) if self.selfCorr else loss
+        loss = 10*l_seg+l_pt+l_seg2pt+F.l1_loss(pred_c_seg, pred_c) if self.selfCorr else 10*l_seg+l_pt+l_seg2pt
         return op, pred_c, pred_c_seg, loss
 
     def _initialize_weights(self):
