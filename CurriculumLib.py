@@ -35,22 +35,38 @@ class MaskToTensor(object):
         return torch.from_numpy(np.array(img, dtype=np.int32)).long()
 
 class DataLoader_riteyes(Dataset):
-    def __init__(self, dataDiv_Obj, path2data, fold_num, cond, augFlag, size, scale=False):
+    def __init__(self, dataDiv_Obj, path2data, fold_num, cond, augFlag, size, sort='random', scale=False):
         cond = 'train_idx' if 'train' in cond else cond
         cond = 'valid_idx' if 'valid' in cond else cond
         cond = 'test_idx' if 'test' in cond else cond
         self.scale = scale
         self.augFlag = augFlag
         self.imList = dataDiv_Obj.folds[fold_num][cond]
-        
-        loc = np.random.permutation(self.imList.shape[0])
-        self.imList = self.imList[loc, :] # Randomize entire sequence
         self.arch = dataDiv_Obj.arch
         self.path2data = path2data
         self.size = size
-    
+        self.sort(sort)
+
+    def sort(self, sort):
+        if sort=='ordered':
+            # Completely ordered
+            loc = np.unique(self.imList,
+                            return_counts=True,
+                            axis=0)
+            print('Warning. Non-unique file list.') if np.any(loc[1]~=1) else print('Sorted list')
+            self.imList = loc[0]
+        elif sort=='semiordered':
+            # Randomize first, then sort by archNum
+            loc = np.random.permutation(self.imList.shape[0])
+            self.imList = self.imList[loc, :]
+            loc = np.argsort(self.imList[:, 1])
+            self.imList = self.imList[loc, :]
+        elif sort=='random':
+            # Completely random selection. DEFAULT.
+            loc = np.random.permutation(self.imList.shape[0])
+            self.imList = self.imList[loc, :]
+
     def scaleFn(self, img, label, elParam, pupil_center):
-        
         dsize = (int(0.5*img.shape[1]), int(0.5*img.shape[0]))
         H = np.array([[self.scale, 0, 0],
                       [0, self.scale, 0],
@@ -62,7 +78,7 @@ class DataLoader_riteyes(Dataset):
         elParam = (elParam_1, elParam_2)
         pupil_center = H[:2, :2].dot(pupil_center) if not np.all(pupil_center==-1) else pupil_center
         return img, label, elParam, pupil_center
-    
+
     def __len__(self):
         return self.imList.shape[0]
 
@@ -82,10 +98,10 @@ class DataLoader_riteyes(Dataset):
                                                     elParam,
                                                     pupil_center,
                                                     self.size)
-        
+
         if self.scale:
             img, label, elParam, pupil_center = self.scaleFn(img, label, elParam, pupil_center)
-        
+
         img, label, pupil_center, elParam = augment(img,
                                                     label,
                                                     pupil_center,
@@ -93,22 +109,22 @@ class DataLoader_riteyes(Dataset):
                                                                                    label,
                                                                                    pupil_center,
                                                                                    elParam)
-        
+
         # Modify labels by removing Sclera class
         label[label == 1] = 0 # If Sclera exists, move it to background.
         label[label == 2] = 1 # Move Iris to 1
         label[label == 3] = 2 # Move Pupil to 2
-        
+
         # Compute edge weight maps
         spatialWeights = cv2.Canny(label.astype(np.uint8), 0, 1)/255
         spatialWeights = 1 + cv2.dilate(spatialWeights,(3,3), iterations = 1)*20
 
         # Calculate distMaps for only Iris and Pupil. Pupil: 2. Iris: 1. Rest: 0.
         distMap = np.zeros((3, *img.shape))
-        
+
         for i in range(0, numClasses):
             distMap[i, ...] = one_hot2dist(label.astype(np.uint8)==i)
-        
+
         img = transform(img/img.max()) # Normalize to 0 and 1
         label = MaskToTensor()(label)
         spatialWeights = torch.from_numpy(spatialWeights)
@@ -133,7 +149,7 @@ class DataLoader_riteyes(Dataset):
         pupil_param = f['Fits']['pupil'][im_num, ...] if f['Fits']['pupil'].__len__() != 0 else -np.ones(5, )
         iris_param = f['Fits']['iris'][im_num, ...] if f['Fits']['iris'].__len__() != 0 else -np.ones(5, )
         f.close()
-        
+
         cond1 = np.all(pupil_center == -1)
         cond2 = np.all(mask_noSkin == -1)
         cond3 = np.all(pupil_param == -1)
@@ -169,7 +185,6 @@ def readArchives(path2arc_keys):
 
         loc = np.arange(0, N)
         res = np.flip(chunkData['resolution'], axis=1) # Flip the resolution
-        #res = chunkData['resolution']
         AllDS['im_num'].append(loc)
         AllDS['archive'].append(chunkData['archive'].reshape(-1)[loc])
         AllDS['pupil_loc'].append(pupil_loc[loc, :]/res[loc, :])
@@ -241,7 +256,7 @@ def generate_strat_indices(AllDS):
     loc_nExist = np.sum(loc_nExist, 1).squeeze().astype(np.bool)
     loc = loc_oBounds & ~loc_nExist # Location of images to remove
     AllDS = rmEntries(AllDS, loc)
-    
+
     # Generate 2D histogram of pupil centers
     numBins = 5
     _, edgeList = np.histogramdd(AllDS['pupil_loc'], bins=numBins)
@@ -273,11 +288,11 @@ def generate_strat_indices(AllDS):
 
 def generate_fileList(AllDS, mode='vanilla', notest=True):
     indx, AllDS = generate_strat_indices(AllDS)
-    
+
     archNum = np.unique(AllDS['archive'],
                         return_index=True,
                         return_inverse=True)[2]
-    
+
     feats = np.stack([AllDS['im_num'], archNum, indx], axis=1)
     validPerc = .20
 
@@ -335,7 +350,6 @@ def generate_fileList(AllDS, mode='vanilla', notest=True):
         data_div.assignIdx(0, feats, feats, feats)
 
     return data_div
-
 
 def generateIdx(samplesList, batch_size):
     '''

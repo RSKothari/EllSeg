@@ -143,7 +143,7 @@ class my_ellipse():
         alpha = (a*np.sin(self.param[-1]))**2 + (b*np.cos(self.param[-1]))**2
         beta = (a*np.cos(self.param[-1]))**2 + (b*np.sin(self.param[-1]))**2
         gamma = (a**2 - b**2)*np.sin(2*self.param[-1])
-        
+
         if mode == 'equiSlope':
             slope_list = [1e-6, 1, 1000, -1]
             K_fun = lambda m_i:  (m_i*gamma + 2*alpha)/(2*beta*m_i + gamma)
@@ -162,7 +162,7 @@ class my_ellipse():
             #y_r = y_r[[0, 1, 4, 5]]
 
         elif mode == 'equiAngle':
-            
+
             #T = 0.5*np.pi*np.array([-1.5, -0.5, 0.5, 1.5])
             T = 0.5*np.pi*np.array([-1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2])
             N = len(T)
@@ -170,7 +170,7 @@ class my_ellipse():
             y = self.param[3]*np.sin(T)
             H_rot = rotation_2d(-self.param[-1])
             X1 = H_rot.dot(np.stack([x, y, np.ones(N, )], axis=0))
-            
+
             #slopes = -(2*alpha*X1[0, :] + gamma*X1[1, :])/(2*beta*X1[1, :] + gamma*X1[0, :])
             #print(X1)
             #print(slopes)
@@ -255,9 +255,9 @@ class ElliFit():
         N = np.prod(self.Phi[1:4]) - self.Phi[0]*(self.Phi[3]**2) - self.Phi[2]**2 - self.Phi[4]*(self.Phi[1]**2 - 4*self.Phi[0])
         D1 = (self.Phi[1]**2 - 4*self.Phi[0])*(1 + self.Phi[0] - np.sqrt((1 - self.Phi[0])**2 + self.Phi[1]**2))
         D2 = (self.Phi[1]**2 - 4*self.Phi[0])*(1 + self.Phi[0] + np.sqrt((1 - self.Phi[0])**2 + self.Phi[1]**2))
-        
+
         cond4 = (N/D1 > 0) & (N/D2 > 0)
-        
+
         cond1 = self.Phi[0] > 0
         val1 = np.prod(self.Phi[1:4])
         val2 = self.Phi[0]*self.Phi[-2]**2 + self.Phi[2]**2
@@ -364,9 +364,9 @@ def one_hot2dist(posmask):
     h, w = posmask.shape
     mxDist = np.sqrt((h-1)**2 + (w-1)**2)
     if np.any(posmask):
-        assert len(posmask.shape) == 2    
+        assert len(posmask.shape) == 2
         res = np.zeros_like(posmask)
-        posmask = posmask.astype(np.bool)    
+        posmask = posmask.astype(np.bool)
         if posmask.any():
             negmask = ~posmask
             res = distance(negmask) * negmask - (distance(posmask) - 1) * posmask
@@ -413,30 +413,30 @@ def pad2Size(img, mask, elParam, pupil_c, size):
     badPup = True if np.all(elParam[0] == -1) else False
     badIri = True if np.all(elParam[1] == -1) else False
     badPup_c = True if np.all(pupil_c == -1) else False
-    
+
     r_in, c_in = img.shape
     r_out, c_out = size
     up_r = r_out - r_in
     up_c = c_out - c_in
-    
+
     assert up_r%2 == 0 # The difference needs to be div by 2
     assert up_c%2 == 0
-    
+
     up_r = int(0.5*up_r)
     up_c = int(0.5*up_c)
-    
+
     img = np.pad(img, ((up_r, up_r), (up_c, up_c)), mode='constant')
     mask = np.pad(mask, ((up_r, up_r), (up_c, up_c)), mode='constant')
-    
+
     elParam[0][:2] = elParam[0][:2] + np.array([up_c, up_r]) if not badPup else elParam[0][:2]
     elParam[1][:2] = elParam[1][:2] + np.array([up_c, up_r]) if not badIri else elParam[1][:2]
     pupil_c = pupil_c + np.array([up_c, up_r]) if not badPup_c else pupil_c
-    return img, mask, pupil_c, elParam, 
-    
+    return img, mask, pupil_c, elParam,
+
 def linVal(x, xlims, ylims, offset):
     '''
     Given xlims (x_min, x_max) and ylims (y_min, y_max), i.e, start and end,
-    compute the value of y=f(x). Offset contains the x0 such that for all x<x0, 
+    compute the value of y=f(x). Offset contains the x0 such that for all x<x0,
     y is clipped to y_min.
     '''
     if x < offset:
@@ -446,11 +446,11 @@ def linVal(x, xlims, ylims, offset):
     else:
         y = (np.diff(ylims)/np.diff(xlims))*(x - offset)
         return y.item()
-    
+
 def getValidPoints(LabelMat):
     '''
     Given labels, identify pupil and iris points.
-    pupil: label == 3, iris: label ==2 
+    pupil: label == 3, iris: label ==2
     '''
     im = np.uint8(255*LabelMat.astype(np.float32)/LabelMat.max())
     edges = cv2.Canny(im, 50, 100)
@@ -465,9 +465,9 @@ def getValidPoints(LabelMat):
         irisPts.append(np.array(loc)) if not condIris else None
     pupilPts = np.stack(pupilPts, axis=0) if len(pupilPts) > 0 else []
     irisPts = np.stack(irisPts, axis=0) if len(irisPts) > 0 else []
-    return pupilPts, irisPts 
+    return pupilPts, irisPts
 
-# Data extraction helpers 
+# Data extraction helpers
 
 def generateEmptyStorage(name, subset):
     '''
@@ -476,8 +476,8 @@ def generateEmptyStorage(name, subset):
     consistency across all datasets.
     '''
     Data = {k:[] for k in ['Images', # Gray image
-                           'dataset', # Dataset 
-                           'subset', # Subset 
+                           'dataset', # Dataset
+                           'subset', # Subset
                            'resolution', # Image resolution
                            'archive', # H5 file name
                            'Info', # Path to original image
@@ -486,9 +486,9 @@ def generateEmptyStorage(name, subset):
                            'Fits', # Pupil and Iris fits
                            'pupil_loc']}
     Data['Fits'] = {k:[] for k in ['pupil', 'iris']}
-    
-    Key = {k:[] for k in [  'dataset',# Dataset 
-                            'subset', # Subset 
+
+    Key = {k:[] for k in [  'dataset',# Dataset
+                            'subset', # Subset
                             'resolution', # Image resolution
                             'archive', # H5 file name
                             'Info', # Path to original image

@@ -135,3 +135,19 @@ def my_collate(batch):
     pupilPhi = torch.stack([item[7][0] for item in batch], dim=0)
     irisPhi = torch.stack([item[7][1] for item in batch], dim=0)
     return I, M, M_nS, spatW, distM, subjectID, fName, (pupilPhi, irisPhi)
+
+
+def load_from_file(paths_file):
+    # Loads model weights from paths_file, a tuple of filepaths
+    # Sequentially moves from first file, attempts to load and if unsuccessful
+    # loads the next file and so on ...
+    for path in paths_file:
+        if path:
+            try:
+                netDict = torch.load(path)
+                print('File loaded from: {}'.format(path))
+            except:
+                print('WARNING. Path found but failed to load: {}'.format(path))
+        else:
+            netDict = {}
+    return netDict

@@ -190,7 +190,8 @@ class DenseNet2D(nn.Module):
 
     def forward(self, x, target, pupil_center, spatWts, distMap, cond, alpha):
         x4, x3, x2, x1, x = self.enc(x)
-        pred_c = self.bottleneck_lin(torch.mean(x, (2, 3)))
+        latent = torch.mean(x.flatten(start_dim=2), -1) # [B, features]
+        pred_c = self.bottleneck_lin(latent)
         op = self.dec(x4, x3, x2, x1, x)
 
         # Compute seg losses
@@ -201,7 +202,7 @@ class DenseNet2D(nn.Module):
                                                       target.shape[1:]), 1, cond)
 
         loss = 10*l_seg+l_pt+l_seg2pt+F.l1_loss(pred_c_seg, pred_c) if self.selfCorr else 10*l_seg+l_pt+l_seg2pt
-        return op, pred_c, pred_c_seg, loss
+        return op, latent, pred_c, pred_c_seg, loss
 
     def _initialize_weights(self):
         for m in self.modules():

@@ -9,11 +9,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from args import parse_args
+from helperfunctions import mypause
 from modelSummary import model_dict
-from pytorchtools import EarlyStopping
+from pytorchtools import load_from_file
 from torch.utils.data import DataLoader
-from helperfunctions import mypause, linVal
-from utils import get_nparams, get_predictions, lossandaccuracy
+from utils import get_nparams, get_predictions
 from utils import getSeg_metrics, getPoint_metric, generateImageGrid, unnormPts
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
@@ -41,28 +41,22 @@ if __name__ == '__main__':
     path2model = os.path.join(LOGDIR, 'weights')
     path2checkpoint = os.path.join(LOGDIR, 'checkpoints')
     path2writer = os.path.join(LOGDIR, 'TB.lock')
+    path2op = os.path.join('op', args.curObj)
 
     os.makedirs(LOGDIR, exist_ok=True)
     os.makedirs(path2model, exist_ok=True)
     os.makedirs(path2checkpoint, exist_ok=True)
     os.makedirs(path2writer, exist_ok=True)
+    os.makedirs(path2op, exist_ok=True)
 
     model = model_dict[args.model]
 
-    if args.loadfile:
-        print("NOTE resuming training")
-        model  = model.to(device)
-        filename = args.loadfile
-        if not os.path.exists(filename):
-            print("model path not found!")
-            sys.exit(1)
-        netDict = torch.load(filename)
+    netDict = load_from_file([args.loadfile, path2checkpoint])
+    startEp = netDict['epoch'] if 'epoch' in netDict.keys() else 0
+    if 'state_dict' in netDict.keys():
         model.load_state_dict(netDict['state_dict'])
-        startEp = netDict['epoch'] if 'epoch' in netDict.keys() else 0
-    else:
-        print('Incorrect file path')
-        startEp = 0
 
+    print('Parameters: {}'.format(get_nparams(model)))
     model = model if not args.useMultiGPU else torch.nn.DataParallel(model)
     model = model.to(device).to(args.prec)
 
@@ -72,60 +66,55 @@ if __name__ == '__main__':
     testObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
     testObj.augFlag = False
 
-    trainloader = DataLoader(trainObj,
-                             batch_size=args.batchsize,
-                             shuffle=True,
-                             num_workers=args.workers,
-                             drop_last=True)
-    validloader = DataLoader(validObj,
-                             batch_size=args.batchsize,
-                             shuffle=False,
-                             num_workers=args.workers,
-                             drop_last=True)
+    testloader = DataLoader(testObj,
+                            batch_size=args.batchsize,
+                            shuffle=True,
+                            num_workers=args.workers,
+                            drop_last=False)
 
     if args.disp:
         fig, axs = plt.subplots(nrows=1, ncols=1)
     #%%
-    for epoch in range(startEp, args.epochs):
-        accLoss = 0.0
-        ious = []
-        dists = []
-        dists_seg = []
-        model.train()
-        alpha = linVal(epoch, (0, args.epochs), (0, 1), 0)
+    accLoss = 0.0
+    imCounter = 0
+    ious = []
+    dists = []
+    dists_seg = []
+    model.eval()
 
-        for bt, batchdata in enumerate(trainloader):
+    opDict = {'id':[], 'archNum': [], 'archName': [], 'code': [],
+              'scores':{'iou':[], 'lat_dst':[], 'seg_dst':[]},
+              'pred':{'pup_c':[], 'seg_c':[], 'mask':[]},
+              'gt':{'pup_c':[], 'mask':[]}}
+
+    with torch.no_grad():
+        for bt, batchdata in enumerate(testloader):
             img, labels, spatialWeights, distMap, pupil_center, cond = batchdata
-            optimizer.zero_grad()
-
-            output, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
-                                                          labels.to(device).long(),
-                                                          pupil_center.to(device).to(args.prec),
-                                                          spatialWeights.to(device).to(args.prec),
-                                                          distMap.to(device).to(args.prec),
-                                                          cond.to(device).to(args.prec),
-                                                          alpha)
+            output, latent, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
+                                                                  labels.to(device).long(),
+                                                                  pupil_center.to(device).to(args.prec),
+                                                                  spatialWeights.to(device).to(args.prec),
+                                                                  distMap.to(device).to(args.prec),
+                                                                  cond.to(device).to(args.prec),
+                                                                  0.5)
 
             loss = loss if args.useMultiGPU else loss.mean()
-            loss.backward()
-            optimizer.step()
-            torch.cuda.empty_cache() # Clear cache for unused nodes
 
             accLoss += loss.detach().cpu().item()
             predict = get_predictions(output)
-            iou = getSeg_metrics(labels.numpy(),
-                                 predict.numpy(),
-                                 cond.numpy())[1]
-            ptDist = getPoint_metric(pupil_center.numpy(),
-                                     pred_center.detach().cpu().numpy(),
-                                     cond.numpy(),
-                                     img.shape[2:],
-                                     True) # Unnormalizes the points
-            ptDist_seg = getPoint_metric(pupil_center.numpy(),
-                                         seg_center.detach().cpu().numpy(),
-                                         cond.numpy(),
-                                         img.shape[2:],
-                                         True) # Unnormalizes the points
+            iou, iou_bySample = getSeg_metrics(labels.numpy(),
+                                               predict.numpy(),
+                                               cond.numpy())[1:]
+            ptDist, ptDist_bySample = getPoint_metric(pupil_center.numpy(),
+                                                      pred_center.detach().cpu().numpy(),
+                                                      cond.numpy(),
+                                                      img.shape[2:],
+                                                      True) # Unnormalizes the points
+            ptDist_seg, ptDist_seg_bySample = getPoint_metric(pupil_center.numpy(),
+                                                              seg_center.detach().cpu().numpy(),
+                                                              cond.numpy(),
+                                                              img.shape[2:],
+                                                              True) # Unnormalizes the points
             dists.append(ptDist)
             dists_seg.append(ptDist_seg)
             ious.append(iou)
@@ -140,68 +129,36 @@ if __name__ == '__main__':
                                       cond.numpy(),
                                       override=True)
 
+            for i in range(0, img.shape[0]):
+                opDict['id'].append(testObj.imList[imCounter, 0])
+                opDict['archNum'].append(testObj.imList[imCounter, 1])
+                opDict['archName'].append(testObj.archName[opDict['archNum']])
+                opDict['code'].append(latent.detach().numpy())
+                opDict['pred']['pup_c'].append(pup_c[i, :])
+                opDict['pred']['seg_c'].append(seg_c[i, :])
+                opDict['pred']['mask'].append(predict[i,...].numpy().astype(np.uint8))
+                opDict['scores']['iou'].append(iou_bySample[i, ...])
+                opDict['scores']['lat_dst'].append(ptDist_bySample[i, ...])
+                opDict['scores']['seg_dst'].append(ptDist_seg_bySample[i, ...])
+                opDict['gt']['pup_c'].append(pupil_center[i,...].numpy())
+                opDict['gt']['mask'].append(labels[i,...].numpy().astype(np.uint8))
+
+            imCounter+=1
             if args.disp:
-                if (epoch == startEp) and (bt == 0):
+                if bt == 0:
                     h_im = plt.imshow(dispI.permute(1, 2, 0))
                     plt.pause(0.01)
                 else:
                     h_im.set_data(dispI.permute(1, 2, 0))
                     mypause(0.01)
 
-            if bt%10 == 0:
-                logger.write('Epoch:{} [{}/{}], Loss: {:.3f}'.format(epoch,
-                                                                     bt,
-                                                                     len(trainloader),
-                                                                     loss.item()))
-
         ious = np.stack(ious, axis=0)
         ious = np.nanmean(ious, axis=0)
-        logger.write('Epoch:{}, Train IoU: {}'.format(epoch, ious))
+        print('mIoU: {}. IoUs: {}'.format(np.mean(ious), ious))
+        print('Latent space pupil distance: {}'.format(np.nanmean(dists),
+                                                       np.nanstd(dists)))
+        print('Segmentation pupil distance: {}'.format(np.mean(dists_seg),
+                                                       np.nanstd(dists_seg)))
 
-        # Add info to tensorboard
-        writer.add_scalar('train/loss', accLoss/bt, epoch)
-        writer.add_scalars('train/pup_dst', {'mu':np.nanmean(dists),
-                                             'std':np.nanstd(dists)}, epoch)
-        writer.add_scalars('train/seg_dst', {'mu':np.nanmean(dists_seg),
-                                             'std':np.nanstd(dists_seg)}, epoch)
-        writer.add_scalars('train/iou', {'mIOU':np.mean(ious),
-                                         'bG':ious[0],
-                                         'iris':ious[1],
-                                         'pupil':ious[2]}, epoch)
-
-        lossvalid, ious, dists, dists_seg = lossandaccuracy(args, validloader, model, alpha, device)
-
-        # Add valid info to tensorboard
-        writer.add_scalar('valid/loss', lossvalid, epoch)
-        writer.add_scalars('valid/pup_dst', {'mu':np.nanmean(dists),
-                                             'std':np.nanstd(dists)}, epoch)
-        writer.add_scalars('valid/seg_dst', {'mu':np.nanmean(dists_seg),
-                                             'std':np.nanstd(dists_seg)}, epoch)
-        writer.add_scalars('valid/iou', {'mIOU':np.mean(ious),
-                                         'bG':ious[0],
-                                         'iris':ious[1],
-                                         'pupil':ious[2]}, epoch)
-        writer.add_image('train/op', dispI, epoch)
-
-        for name, param in model.named_parameters():
-            writer.add_histogram(name, param.clone().cpu().data.numpy(), epoch)
-
-        f = 'Epoch:{}, Valid Loss: {:.3f}, mIoU: {}'
-        logger.write(f.format(epoch, lossvalid, np.mean(ious)))
-
-        scheduler.step(lossvalid)
-        early_stopping(lossvalid, model.state_dict() if not args.useMultiGPU else model.module.state_dict())
-
-        netDict = {'state_dict':[], 'epoch': epoch}
-        netDict['state_dict'] = model.state_dict() if not args.useMultiGPU else model.module.state_dict()
-
-        if early_stopping.early_stop:
-            torch.save(netDict, os.path.join(path2model, args.model + 'earlystop_{}.pkl'.format(epoch)))
-            print("Early stopping")
-            break
-
-        ##save the model every epoch
-        if epoch %5 == 0:
-            torch.save(netDict if not args.useMultiGPU else model.module.state_dict(),
-                       os.path.join(path2model, args.model+'_{}.pkl'.format(epoch)))
-    writer.close()
+        print('--- Saving output directory ---')
+        np.save(os.path.join(path2op, 'opDict.mat'), opDict)

@@ -38,7 +38,7 @@ if __name__ == '__main__':
         print ("valid models are: {}".format(list(model_dict.keys())))
         exit(1)
 
-    LOGDIR = os.path.join('logs', args.model, args.expname)
+    LOGDIR = os.path.join(os.getcwd(), 'logs', args.model, args.expname)
     path2model = os.path.join(LOGDIR, 'weights')
     path2checkpoint = os.path.join(LOGDIR, 'checkpoints')
     path2writer = os.path.join(LOGDIR, 'TB.lock')
@@ -76,9 +76,12 @@ if __name__ == '__main__':
     print('Total number of trainable parameters: {}\n'.format(nparams))
 
     optimizer = torch.optim.Adam(model.parameters(), lr = args.lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=5) # Default factor = 0.1
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
+                                                           'min',
+                                                           patience=3,
+                                                           verbose=True) # Default factor = 0.1
 
-    patience = 100
+    patience = 5
     early_stopping = EarlyStopping(mode='min',
                                    delta=1e-2,
                                    verbose=True,
@@ -125,7 +128,7 @@ if __name__ == '__main__':
             img, labels, spatialWeights, distMap, pupil_center, cond = batchdata
             optimizer.zero_grad()
 
-            output, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
+            output, _, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
                                                           labels.to(device).long(),
                                                           pupil_center.to(device).to(args.prec),
                                                           spatialWeights.to(device).to(args.prec),
@@ -147,12 +150,12 @@ if __name__ == '__main__':
                                      pred_center.detach().cpu().numpy(),
                                      cond.numpy(),
                                      img.shape[2:],
-                                     True) # Unnormalizes the points
+                                     True)[0] # Unnormalizes the points
             ptDist_seg = getPoint_metric(pupil_center.numpy(),
                                          seg_center.detach().cpu().numpy(),
                                          cond.numpy(),
                                          img.shape[2:],
-                                         True) # Unnormalizes the points
+                                         True)[0] # Unnormalizes the points
             dists.append(ptDist)
             dists_seg.append(ptDist_seg)
             ious.append(iou)
@@ -228,7 +231,7 @@ if __name__ == '__main__':
             break
 
         ##save the model every epoch
-        if epoch %5 == 0:
+        if epoch %1 == 0:
             torch.save(netDict if not args.useMultiGPU else model.module.state_dict(),
                        os.path.join(path2model, args.model+'_{}.pkl'.format(epoch)))
     writer.close()

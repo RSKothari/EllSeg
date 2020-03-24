@@ -119,6 +119,9 @@ def getSeg_metrics(y_true, y_pred, cond):
     Note: This function computes the nan mean. This is because datasets may not
     have all classes present.
     '''
+    assert y_pred.dim() == 3, 'Incorrect number of dimensions'
+    assert y_true.dim() == 3, 'Incorrect number of dimensions'
+
     cond = cond.astype(np.bool)
     B = y_true.shape[0]
     score_list = []
@@ -136,35 +139,58 @@ def getSeg_metrics(y_true, y_pred, cond):
                 score_vals[val] = score[j]
         score_list.append(score_vals)
     score_list = np.stack(score_list, axis=0)
-    score_list = score_list[~cond[:, 1], :] # Only select valid entries
-    perClassIOU = np.nanmean(score_list, axis=0) if len(score_list) > 0 else np.nan*np.ones(3, )
-    meanIOU = np.nanmean(perClassIOU) if len(score_list) > 0 else np.nan
-    return meanIOU, perClassIOU
+    score_list_clean = score_list[~cond[:, 1], :] # Only select valid entries
+    perClassIOU = np.nanmean(score_list_clean, axis=0) if len(score_list_clean) > 0 else np.nan*np.ones(3, )
+    meanIOU = np.nanmean(perClassIOU) if len(score_list_clean) > 0 else np.nan
+    return meanIOU, perClassIOU, score_list
 
 def getPoint_metric(y_true, y_pred, cond, sz, do_unnorm):
     # Unnormalize predicted points
     if do_unnorm:
         y_pred = unnormPts(y_pred, sz)
-    
+
     cond = cond.astype(np.bool)
     flag = (~cond[:, 0]).astype(np.float)
     dist = metrics.pairwise_distances(y_true, y_pred, metric='euclidean')
     dist = flag*np.diag(dist)
-    return np.sum(dist)/np.sum(flag) if np.any(flag) else np.nan
+    return (np.sum(dist)/np.sum(flag) if np.any(flag) else np.nan,
+            dist)
 
 def generateImageGrid(I, mask, pupil_center, cond, override=False):
+    '''
+    Parameters
+    ----------
+    I : numpy array [B, H, W]
+        A batchfirst array which holds images.
+    mask : numpy array [B, H, W]
+        A batch first array which holds for individual pixels.
+    pupil_center : numpy array [B, 2]
+        Identified pupil center for plotting.
+    cond : numpy array [B, 5]
+        A flag array which holds information about what information is present.
+    override : bool, optional
+        An override flag which plots data despite being demarked in the flag
+        array. Generally used during testing.
+        The default is False.
+
+    Returns
+    -------
+    I_o : numpy array [Ho, Wo]
+        Returns an array holding concatenated images from the input overlayed
+        with segmentation mask, pupil center and pupil ellipse.
+    '''
     I_o = []
     for i in range(0, cond.shape[0]):
         im = I[i, ...].squeeze()
         im = np.stack([im for i in range(0, 3)], axis=2)
-        
+
         if (not cond[i, 1]) or override:
             # If masks exists
             rr, cc = np.where(mask[i, ...] == 1)
             im[rr, cc, ...] = np.array([-1, 1, -1]) # Red
             rr, cc = np.where(mask[i, ...] == 2)
             im[rr, cc, ...] = np.array([1, 1, -1])
-        
+
         if (not cond[i, 0]) or override:
             # If pupil center exists
             rr, cc = circle(pupil_center[i, 1].clip(6, im.shape[0]-6),
@@ -227,21 +253,21 @@ def lossandaccuracy(args, loader, model, alpha, device):
                                                           alpha)
             loss = loss.mean()
             epoch_loss.append(loss.item())
-            
+
             ptDist = getPoint_metric(pupil_center.numpy(),
                                      pred_center.detach().cpu().numpy(),
                                      cond.numpy(),
                                      img.shape[2:],
                                      True) # Unnormalizes the points
-                                     
+
             ptDist_seg = getPoint_metric(pupil_center.numpy(),
                                          seg_center.detach().cpu().numpy(),
                                          cond.numpy(),
                                          img.shape[2:],
-                                         True) # Unnormalizes the points                         
+                                         True) # Unnormalizes the points
             dists.append(ptDist)
             dists_seg.append(ptDist_seg)
-            
+
             predict = get_predictions(output)
             iou = getSeg_metrics(labels.numpy(),
                                  predict.numpy(),
