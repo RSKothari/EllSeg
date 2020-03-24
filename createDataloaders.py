@@ -160,3 +160,4 @@ if os.path.exists(path2save) and keepOld:
     validObj.imList = validObj_orig.imList
     testObj.imList = testObj_orig.imList
 pickle.dump((trainObj, validObj, testObj), open(path2save, 'wb'))
+

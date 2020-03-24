@@ -8,6 +8,7 @@ Created on Fri Feb 28 22:08:51 2020
 
 import os
 import time
+import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 from utils import generateImageGrid
@@ -21,7 +22,7 @@ if __name__=='__main__':
     path2data = '/media/rakshit/tank/Dataset'
     path2h5 = os.path.join(path2data, 'All')
     path2arc_keys = os.path.join(path2data, 'MasterKey')
-    
+    '''
     AllDS = readArchives(path2arc_keys)
     datasets_present, subsets_present = listDatasets(AllDS)
     print('Datasets present -----')
@@ -34,11 +35,14 @@ if __name__=='__main__':
     lpw_subs = ['LPW_{}'.format(i+1) for i in range(0, 12)]
     subsets = nv_subs1 + nv_subs2 + lpw_subs + ['none', 'train']
     
-    AllDS = selDataset(AllDS, ['OpenEDS', 'UnityEyes', 'NVGaze', 'LPW'])
+    AllDS = selDataset(AllDS, ['OpenEDS', 'UnityEyes', 'NVGaze', 'LPW', 'riteyes_general'])
     AllDS = selSubset(AllDS, subsets)
     dataDiv_obj = generate_fileList(AllDS, mode='vanilla', notest=True)
     trainObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'train', True, (480, 640), 0.5)
     validObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'valid', False, (480, 640), 0.5)
+    '''
+    f = os.path.join('curObjects', 'cond_2.pkl')
+    trainObj, validObj, _ = pickle.load(open(f, 'rb'))
     
     trainLoader = DataLoader(trainObj,
                              batch_size=16,
@@ -46,7 +50,7 @@ if __name__=='__main__':
                              num_workers=8,
                              drop_last=True)
     
-    fig, axs = plt.subplots(nrows=1, ncols=1)
+    #fig, axs = plt.subplots(nrows=1, ncols=1)
     totTime = []
     startTime = time.time()
     for bt, data in enumerate(trainLoader):
@@ -57,6 +61,7 @@ if __name__=='__main__':
         print('Batch: {}. Time: {}'.format(bt, dT))
         startTime = time.time()
         
+        '''
         if bt == 0:
             h_ims = axs.imshow(0.5*dispI.permute(1, 2, 0)+0.5, cmap='gray')
             plt.show()
@@ -64,6 +69,6 @@ if __name__=='__main__':
         else:
             h_ims.set_data(0.5*dispI.permute(1, 2, 0)+0.5)
             mypause(0.01)
-            
+        ''' 
         
     print('Time for 1 epoch: {}'.format(np.sum(totTime)))
