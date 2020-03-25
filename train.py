@@ -77,13 +77,14 @@ if __name__ == '__main__':
 
     optimizer = torch.optim.Adam(model.parameters(), lr = args.lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
-                                                           'min',
-                                                           patience=3,
-                                                           verbose=True) # Default factor = 0.1
+                                                           'max',
+                                                           patience=5,
+                                                           verbose=True,
+                                                           factor=0.01) # Default factor = 0.1
 
     patience = 5
-    early_stopping = EarlyStopping(mode='min',
-                                   delta=1e-2,
+    early_stopping = EarlyStopping(mode='max',
+                                   delta=0.01,
                                    verbose=True,
                                    patience=patience,
                                    fName='checkpoint.pt',
@@ -98,7 +99,7 @@ if __name__ == '__main__':
     validObj.augFlag = False
 
     if args.overfit > 0:
-        # This is a flag to check if architectures work
+        # This is a flag to check if attempting to overfit
         trainObj.imList = trainObj.imList[:args.overfit*args.batchsize]
         validObj.imList = validObj.imList[:args.overfit*args.batchsize]
 
@@ -139,7 +140,7 @@ if __name__ == '__main__':
             loss = loss if args.useMultiGPU else loss.mean()
             loss.backward()
             optimizer.step()
-            torch.cuda.empty_cache() # Clear cache for unused nodes
+            #torch.cuda.empty_cache() # Clear cache for unused nodes
 
             accLoss += loss.detach().cpu().item()
             predict = get_predictions(output)
@@ -219,8 +220,9 @@ if __name__ == '__main__':
         f = 'Epoch:{}, Valid Loss: {:.3f}, mIoU: {}'
         logger.write(f.format(epoch, lossvalid, np.mean(ious)))
 
-        scheduler.step(lossvalid)
-        early_stopping(lossvalid, model.state_dict() if not args.useMultiGPU else model.module.state_dict())
+        scoreTracker = np.mean(ious) + 2 - 2.5e-3*(np.nanmean(dists) + np.nanmean(dists_seg)) # Max value 3
+        scheduler.step(scoreTracker)
+        early_stopping(scoreTracker, model.state_dict() if not args.useMultiGPU else model.module.state_dict())
 
         netDict = {'state_dict':[], 'epoch': epoch}
         netDict['state_dict'] = model.state_dict() if not args.useMultiGPU else model.module.state_dict()
@@ -231,7 +233,7 @@ if __name__ == '__main__':
             break
 
         ##save the model every epoch
-        if epoch %1 == 0:
+        if epoch %5 == 0:
             torch.save(netDict if not args.useMultiGPU else model.module.state_dict(),
                        os.path.join(path2model, args.model+'_{}.pkl'.format(epoch)))
     writer.close()

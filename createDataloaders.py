@@ -54,6 +54,7 @@ testObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'test', False, (480, 640),
 #
 path2save = os.path.join(os.getcwd(), 'curObjects', 'cond_0.pkl')
 if os.path.exists(path2save) and keepOld:
+    print('Preserving old selections ...')
     # This ensure that the original selection remains the same
     trainObj_orig, validObj_orig, testObj_orig = pickle.load(open(path2save, 'rb'))
     trainObj.imList = trainObj_orig.imList
@@ -103,6 +104,7 @@ testObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'test', False, (480, 640),
 #
 path2save = os.path.join(os.getcwd(), 'curObjects', 'cond_1.pkl')
 if os.path.exists(path2save) and keepOld:
+    print('Preserving old selections ...')
     # This ensure that the original selection remains the same
     trainObj_orig, validObj_orig, testObj_orig = pickle.load(open(path2save, 'rb'))
     trainObj.imList = trainObj_orig.imList
@@ -154,6 +156,7 @@ testObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'test', False, (480, 640),
 #
 path2save = os.path.join(os.getcwd(), 'curObjects', 'cond_2.pkl')
 if os.path.exists(path2save) and keepOld:
+    print('Preserving old selections ...')
     # This ensure that the original selection remains the same
     trainObj_orig, validObj_orig, testObj_orig = pickle.load(open(path2save, 'rb'))
     trainObj.imList = trainObj_orig.imList

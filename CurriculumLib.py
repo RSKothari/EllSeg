@@ -53,7 +53,7 @@ class DataLoader_riteyes(Dataset):
             loc = np.unique(self.imList,
                             return_counts=True,
                             axis=0)
-            print('Warning. Non-unique file list.') if np.any(loc[1]~=1) else print('Sorted list')
+            print('Warning. Non-unique file list.') if np.any(loc[1]!=1) else print('Sorted list')
             self.imList = loc[0]
         elif sort=='semiordered':
             # Randomize first, then sort by archNum

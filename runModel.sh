@@ -1,10 +1,10 @@
 #!/bin/bash -l
 
 path2ds="/home/rsk3900/Datasets/"
-epochs=50
-workers=8
-batchsize=48
-lr=0.0005
+epochs=100
+workers=10
+batchsize=50
+lr = 0.0001
 
 # Load necessary modules
 spack load /7qmaaiw # Load OpenCV
@@ -33,5 +33,3 @@ do
         sbatch -J ${baseJobName} -o "rc_log/${baseJobName}.o" -e "rc_log/${baseJobName}.e" --mem=16G --cpus-per-task=9 -p tier3 -A riteyes --gres=gpu:v100:1 -t 4-0:0:0 command.lock
     done
 done
-
-

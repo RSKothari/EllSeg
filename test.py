@@ -142,8 +142,8 @@ if __name__ == '__main__':
                 opDict['scores']['seg_dst'].append(ptDist_seg_bySample[i, ...])
                 opDict['gt']['pup_c'].append(pupil_center[i,...].numpy())
                 opDict['gt']['mask'].append(labels[i,...].numpy().astype(np.uint8))
+                imCounter+=1
 
-            imCounter+=1
             if args.disp:
                 if bt == 0:
                     h_im = plt.imshow(dispI.permute(1, 2, 0))
