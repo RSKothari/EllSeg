@@ -146,6 +146,7 @@ def load_from_file(paths_file):
             try:
                 netDict = torch.load(path)
                 print('File loaded from: {}'.format(path))
+                break
             except:
                 print('WARNING. Path found but failed to load: {}'.format(path))
         else:

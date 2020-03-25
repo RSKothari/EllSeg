@@ -119,8 +119,8 @@ def getSeg_metrics(y_true, y_pred, cond):
     Note: This function computes the nan mean. This is because datasets may not
     have all classes present.
     '''
-    assert y_pred.dim() == 3, 'Incorrect number of dimensions'
-    assert y_true.dim() == 3, 'Incorrect number of dimensions'
+    assert y_pred.ndim==3, 'Incorrect number of dimensions'
+    assert y_true.ndim==3, 'Incorrect number of dimensions'
 
     cond = cond.astype(np.bool)
     B = y_true.shape[0]

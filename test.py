@@ -3,6 +3,7 @@
 
 import os
 import sys
+import tqdm
 import torch
 import pickle
 import numpy as np
@@ -37,11 +38,11 @@ if __name__ == '__main__':
         print("valid models are: {}".format(list(model_dict.keys())))
         exit(1)
 
-    LOGDIR = os.path.join('logs', args.model, args.expname)
+    LOGDIR = os.path.join(os.getcwd(), 'logs', args.model, args.expname)
     path2model = os.path.join(LOGDIR, 'weights')
     path2checkpoint = os.path.join(LOGDIR, 'checkpoints')
     path2writer = os.path.join(LOGDIR, 'TB.lock')
-    path2op = os.path.join('op', args.curObj)
+    path2op = os.path.join(os.getcwd(), 'op', str(args.curObj))
 
     os.makedirs(LOGDIR, exist_ok=True)
     os.makedirs(path2model, exist_ok=True)
@@ -88,7 +89,7 @@ if __name__ == '__main__':
               'gt':{'pup_c':[], 'mask':[]}}
 
     with torch.no_grad():
-        for bt, batchdata in enumerate(testloader):
+        for bt, batchdata in enumerate(tqdm.tqdm(testloader)):
             img, labels, spatialWeights, distMap, pupil_center, cond = batchdata
             output, latent, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
                                                                   labels.to(device).long(),
@@ -132,8 +133,8 @@ if __name__ == '__main__':
             for i in range(0, img.shape[0]):
                 opDict['id'].append(testObj.imList[imCounter, 0])
                 opDict['archNum'].append(testObj.imList[imCounter, 1])
-                opDict['archName'].append(testObj.archName[opDict['archNum']])
-                opDict['code'].append(latent.detach().numpy())
+                opDict['archName'].append(testObj.arch[opDict['archNum']])
+                opDict['code'].append(latent.detach().cpu().numpy())
                 opDict['pred']['pup_c'].append(pup_c[i, :])
                 opDict['pred']['seg_c'].append(seg_c[i, :])
                 opDict['pred']['mask'].append(predict[i,...].numpy().astype(np.uint8))
@@ -161,4 +162,4 @@ if __name__ == '__main__':
                                                        np.nanstd(dists_seg)))
 
         print('--- Saving output directory ---')
-        np.save(os.path.join(path2op, 'opDict.mat'), opDict)
+        np.save(os.path.join(path2op, 'opDict'), opDict)
