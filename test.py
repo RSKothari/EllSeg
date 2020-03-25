@@ -10,11 +10,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from args import parse_args
-from helperfunctions import mypause
 from modelSummary import model_dict
 from pytorchtools import load_from_file
 from torch.utils.data import DataLoader
 from utils import get_nparams, get_predictions
+from helperfunctions import mypause, stackall_Dict
 from utils import getSeg_metrics, getPoint_metric, generateImageGrid, unnormPts
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
@@ -153,6 +153,7 @@ if __name__ == '__main__':
                     h_im.set_data(dispI.permute(1, 2, 0))
                     mypause(0.01)
 
+        opDict = stackall_Dict(opDict)
         ious = np.stack(ious, axis=0)
         ious = np.nanmean(ious, axis=0)
         print('mIoU: {}. IoUs: {}'.format(np.mean(ious), ious))

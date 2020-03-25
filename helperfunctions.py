@@ -467,6 +467,15 @@ def getValidPoints(LabelMat):
     irisPts = np.stack(irisPts, axis=0) if len(irisPts) > 0 else []
     return pupilPts, irisPts
 
+def stackall_Dict(D):
+    for key, value in D.items():
+        if type(D[key]) is list:
+            print('Stacking: {}'.format(key))
+            D[key] = np.stack(value, axis=0)
+        elif type(D[key]) is dict:
+            stackall_Dict(D[key])
+    return D
+
 # Data extraction helpers
 
 def generateEmptyStorage(name, subset):
