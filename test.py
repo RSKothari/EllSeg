@@ -6,6 +6,7 @@ import sys
 import tqdm
 import torch
 import pickle
+import resource
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -18,6 +19,9 @@ from helperfunctions import mypause, stackall_Dict
 from utils import getSeg_metrics, getPoint_metric, generateImageGrid, unnormPts
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
+
+rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
+resource.setrlimit(resource.RLIMIT_NOFILE, (2048*10, rlimit[1]))
 
 #%%
 if __name__ == '__main__':
@@ -69,7 +73,7 @@ if __name__ == '__main__':
 
     testloader = DataLoader(testObj,
                             batch_size=args.batchsize,
-                            shuffle=True,
+                            shuffle=False,
                             num_workers=args.workers,
                             drop_last=False)
 
@@ -131,10 +135,11 @@ if __name__ == '__main__':
                                       override=True)
 
             for i in range(0, img.shape[0]):
+                archNum = testObj.imList[imCounter, 1]
                 opDict['id'].append(testObj.imList[imCounter, 0])
-                opDict['archNum'].append(testObj.imList[imCounter, 1])
-                opDict['archName'].append(testObj.arch[opDict['archNum']])
-                opDict['code'].append(latent.detach().cpu().numpy())
+                opDict['archNum'].append(archNum)
+                opDict['archName'].append(testObj.arch[archNum])
+                opDict['code'].append(latent[i,...].detach().cpu().numpy())
                 opDict['pred']['pup_c'].append(pup_c[i, :])
                 opDict['pred']['seg_c'].append(seg_c[i, :])
                 opDict['pred']['mask'].append(predict[i,...].numpy().astype(np.uint8))
@@ -163,4 +168,6 @@ if __name__ == '__main__':
                                                        np.nanstd(dists_seg)))
 
         print('--- Saving output directory ---')
-        np.save(os.path.join(path2op, 'opDict'), opDict)
+        f = open(os.path.join(path2op, 'opDict.pkl'), 'wb')
+        pickle.dump(opDict, f)
+        f.close()
