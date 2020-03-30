@@ -114,7 +114,7 @@ if __name__ == '__main__':
                              batch_size=args.batchsize,
                              shuffle=False,
                              num_workers=args.workers,
-                             drop_last=True)
+                             drop_last=False)
 
     if args.disp:
         fig, axs = plt.subplots(nrows=1, ncols=1)
@@ -128,7 +128,7 @@ if __name__ == '__main__':
         alpha = linVal(epoch, (0, args.epochs), (0, 1), 0)
 
         for bt, batchdata in enumerate(trainloader):
-            img, labels, spatialWeights, distMap, pupil_center, cond = batchdata
+            img, labels, spatialWeights, distMap, pupil_center, cond, imInfo = batchdata
             optimizer.zero_grad()
 
             output, _, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
@@ -137,6 +137,7 @@ if __name__ == '__main__':
                                                           spatialWeights.to(device).to(args.prec),
                                                           distMap.to(device).to(args.prec),
                                                           cond.to(device).to(args.prec),
+                                                          imInfo[:, 1], # Send archive number
                                                           alpha)
 
             loss = loss if args.useMultiGPU else loss.mean()

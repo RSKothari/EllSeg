@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from utils import normPts
+from pytorchtools import linStack
 from loss import get_ptLoss, get_segLoss, get_seg2ptLoss
 
 def getSizes(chz, growth, blks=4):
@@ -96,21 +97,6 @@ class convBlock(nn.Module):
         x = self.actfunc(x)
         return x
 
-class centerPts(nn.Module):
-    '''
-    Linear layers to regression pupil center value
-    '''
-    def __init__(self, in_channels):
-        super(centerPts, self).__init__()
-        self.linear_1 = nn.Linear(in_features=in_channels, out_features=64)
-        self.linear_2 = nn.Linear(in_features=64, out_features=2)
-
-    def forward(self, x):
-        x = self.linear_1(x)
-        x = torch.selu(x)
-        x = self.linear_2(x)
-        return x
-
 class DenseNet_encoder(nn.Module):
     def __init__(self, in_c=1, chz=32, actfunc=F.leaky_relu, growth=1.5, norm=nn.BatchNorm2d):
         super(DenseNet_encoder, self).__init__()
@@ -179,19 +165,31 @@ class DenseNet_decoder(nn.Module):
          return o
 
 class DenseNet2D(nn.Module):
-    def __init__(self, chz=32, growth=1.2, actfunc=F.leaky_relu, norm=nn.InstanceNorm2d, selfCorr=False):
+    def __init__(self,
+                 chz=32,
+                 growth=1.2,
+                 actfunc=F.leaky_relu,
+                 norm=nn.InstanceNorm2d,
+                 numSets=2,
+                 selfCorr=False):
         super(DenseNet2D, self).__init__()
         sizes = getSizes(chz, growth)
         self.selfCorr = selfCorr
         self.enc = DenseNet_encoder(in_c=1, chz=chz, actfunc=actfunc, growth=growth, norm=norm)
         self.dec = DenseNet_decoder(chz=chz, out_c=3, actfunc=actfunc, growth=growth, norm=norm)
-        self.bottleneck_lin = centerPts(sizes['enc']['op'][-1])
+        self.bottleneck_lin = linStack(2, sizes['enc']['op'][-1], 64, 2, 0.0)
+        self.dsIdentify_lin = linStack(2, sizes['enc']['op'][-1], 64, numSets, 0.0)
         self._initialize_weights()
 
-    def forward(self, x, target, pupil_center, spatWts, distMap, cond, alpha):
+    def forward(self, x, target, pupil_center, spatWts, distMap, cond, ID, alpha):
+        '''
+        ID: A Tensor containing information about the dataset or subset a entry
+        belongs to.
+        '''
         x4, x3, x2, x1, x = self.enc(x)
         latent = torch.mean(x.flatten(start_dim=2), -1) # [B, features]
         pred_c = self.bottleneck_lin(latent)
+        pred_ds = self.dsIdentify_lin(latent)
         op = self.dec(x4, x3, x2, x1, x)
 
         # Compute seg losses
@@ -206,7 +204,10 @@ class DenseNet2D(nn.Module):
         else:
             loss = 10*l_seg+l_pt+l_seg2pt
         if self.disentangle:
-            loss = loss +
+            loss = loss + conf_Loss(pred_ds, ID)
+        else    
+        
+            
 
         return op, latent, pred_c, pred_c_seg, loss
 

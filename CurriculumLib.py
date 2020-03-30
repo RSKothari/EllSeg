@@ -86,7 +86,7 @@ class DataLoader_riteyes(Dataset):
             ##modified:
         '''
         numClasses = 3
-        img, label, elParam, pupil_center, cond = self.readImage(idx)
+        img, label, elParam, pupil_center, cond, imInfo = self.readImage(idx)
         img, label, pupil_center, elParam = pad2Size(img,
                                                     label,
                                                     elParam,
@@ -126,8 +126,9 @@ class DataLoader_riteyes(Dataset):
         distMap = torch.from_numpy(distMap)
         cond = torch.from_numpy(cond)
         pupil_center = torch.from_numpy(pupil_center).to(torch.float)
+        imInfo = torch.from_numpy(imInfo)
         
-        return (img, label, spatialWeights, distMap, pupil_center, cond)
+        return (img, label, spatialWeights, distMap, pupil_center, cond, imInfo)
 
     def readImage(self, idx):
         '''
@@ -152,7 +153,7 @@ class DataLoader_riteyes(Dataset):
         cond4 = np.all(iris_param == -1)
         cond = np.array([cond1, cond2, cond3, cond4])
 
-        return I, mask_noSkin, (pupil_param, iris_param), pupil_center, cond
+        return I, mask_noSkin, (pupil_param, iris_param), pupil_center, cond, self.imList[idx, :]
 
 def listDatasets(AllDS):
     dataset_list = np.unique(AllDS['dataset'])
