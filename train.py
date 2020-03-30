@@ -20,6 +20,8 @@ from utils import getSeg_metrics, getPoint_metric, generateImageGrid, unnormPts
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 #%%
+embed_log = 5
+
 if __name__ == '__main__':
 
     args = parse_args()
@@ -200,7 +202,7 @@ if __name__ == '__main__':
                                          'iris':ious[1],
                                          'pupil':ious[2]}, epoch)
 
-        lossvalid, ious, dists, dists_seg = lossandaccuracy(args, validloader, model, alpha, device)
+        lossvalid, ious, dists, dists_seg, latent_codes = lossandaccuracy(args, validloader, model, alpha, device)
 
         # Add valid info to tensorboard
         writer.add_scalar('valid/loss', lossvalid, epoch)
@@ -213,6 +215,10 @@ if __name__ == '__main__':
                                          'iris':ious[1],
                                          'pupil':ious[2]}, epoch)
         writer.add_image('train/op', dispI, epoch)
+        if epoch%embed_log:
+            writer.add_embedding(torch.cat(latent_codes, 0),
+                                 labels=validObj.imList[:, 1],
+                                 gloal_step=epoch)
 
         for name, param in model.named_parameters():
             writer.add_histogram(name, param.clone().cpu().data.numpy(), epoch)

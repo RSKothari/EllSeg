@@ -24,12 +24,6 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 from helperfunctions import simple_string, one_hot2dist
 from helperfunctions import my_ellipse, pad2Size
 
-
-#%%
-transform = transforms.Compose(
-    [transforms.ToTensor(),
-     transforms.Normalize([0.5], [0.5])])
-
 class MaskToTensor(object):
     def __call__(self, img):
         return torch.from_numpy(np.array(img, dtype=np.int32)).long()
@@ -125,12 +119,14 @@ class DataLoader_riteyes(Dataset):
         for i in range(0, numClasses):
             distMap[i, ...] = one_hot2dist(label.astype(np.uint8)==i)
 
-        img = transform(img/img.max()) # Normalize to 0 and 1
+        img = (img - img.mean())/img.std()
+        img = torch.from_numpy(img)
         label = MaskToTensor()(label)
         spatialWeights = torch.from_numpy(spatialWeights)
         distMap = torch.from_numpy(distMap)
         cond = torch.from_numpy(cond)
         pupil_center = torch.from_numpy(pupil_center).to(torch.float)
+        
         return (img, label, spatialWeights, distMap, pupil_center, cond)
 
     def readImage(self, idx):

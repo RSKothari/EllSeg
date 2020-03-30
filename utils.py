@@ -241,16 +241,18 @@ def lossandaccuracy(args, loader, model, alpha, device):
     dists = []
     dists_seg = []
     model.eval()
+    latent_codes = []
     with torch.no_grad():
         for bt, batchdata in enumerate(tqdm.tqdm(loader)):
             img, labels, spatialWeights, distMap, pupil_center, cond = batchdata
-            output, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
-                                                          labels.to(device).long(),
-                                                          pupil_center.to(device).to(args.prec),
-                                                          spatialWeights.to(device).to(args.prec),
-                                                          distMap.to(device).to(args.prec),
-                                                          cond.to(device).to(args.prec),
-                                                          alpha)
+            output, latent, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
+                                                              labels.to(device).long(),
+                                                              pupil_center.to(device).to(args.prec),
+                                                              spatialWeights.to(device).to(args.prec),
+                                                              distMap.to(device).to(args.prec),
+                                                              cond.to(device).to(args.prec),
+                                                              alpha)
+            latent_codes.append(latent.detach().cpu())
             loss = loss.mean()
             epoch_loss.append(loss.item())
 
@@ -274,4 +276,4 @@ def lossandaccuracy(args, loader, model, alpha, device):
                                  cond.numpy())[1]
             ious.append(iou)
     ious = np.stack(ious, axis=0)
-    return np.mean(epoch_loss), np.nanmean(ious, 0), dists, dists_seg
+    return np.mean(epoch_loss), np.nanmean(ious, 0), dists, dists_seg, latent_codes
