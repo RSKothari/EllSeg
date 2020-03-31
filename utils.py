@@ -13,6 +13,7 @@ import tqdm
 import copy
 import torch
 import numpy as np
+import torch.nn.functional as F
 
 from torchvision.utils import make_grid
 from skimage.draw import circle
@@ -155,6 +156,21 @@ def getPoint_metric(y_true, y_pred, cond, sz, do_unnorm):
     dist = flag*np.diag(dist)
     return (np.sum(dist)/np.sum(flag) if np.any(flag) else np.nan,
             dist)
+
+def conf_Loss(self, x, gt, flag):
+    '''
+    x: Input predicted one-hot encoding for dataset identity
+    gt: One-hot encoding of target classes
+    flag: Either 1 or 0. Please refer to paper "Turning a Blind Eye: Explicit
+    Removal of Biases and Variation from Deep Neural Network Embeddings"
+    '''
+    if flag:
+        # If true, return the confusion loss
+        loss = torch.mean(torch.mean(-F.log_softmax(x), dim=1))
+    else:
+        # Else, return the secondary loss
+        loss = F.cross_entropy(x, gt)
+    return loss
 
 def generateImageGrid(I, mask, pupil_center, cond, override=False):
     '''

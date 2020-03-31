@@ -8,8 +8,8 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils import normPts
 from pytorchtools import linStack
+from utils import normPts, conf_Loss
 from loss import get_ptLoss, get_segLoss, get_seg2ptLoss
 
 def getSizes(chz, growth, blks=4):
@@ -173,8 +173,13 @@ class DenseNet2D(nn.Module):
                  numSets=2,
                  selfCorr=False):
         super(DenseNet2D, self).__init__()
+
         sizes = getSizes(chz, growth)
+        self.numSets = numSets
+        self.toggle = True
         self.selfCorr = selfCorr
+        self.disentangle_alpha = 1
+
         self.enc = DenseNet_encoder(in_c=1, chz=chz, actfunc=actfunc, growth=growth, norm=norm)
         self.dec = DenseNet_decoder(chz=chz, out_c=3, actfunc=actfunc, growth=growth, norm=norm)
         self.bottleneck_lin = linStack(2, sizes['enc']['op'][-1], 64, 2, 0.0)
@@ -186,6 +191,8 @@ class DenseNet2D(nn.Module):
         ID: A Tensor containing information about the dataset or subset a entry
         belongs to.
         '''
+        #ID_onehot = [torch.zeros(self.numSets, )[ID[i] == 1] for i in range(0, x.shape[0])]
+        #ID_onehot = torch.stack(ID_onehot, dim=0) # [B, self.numSets]
         x4, x3, x2, x1, x = self.enc(x)
         latent = torch.mean(x.flatten(start_dim=2), -1) # [B, features]
         pred_c = self.bottleneck_lin(latent)
@@ -199,16 +206,26 @@ class DenseNet2D(nn.Module):
                                               normPts(pupil_center,
                                                       target.shape[1:]), 1, cond)
 
-        if self.selfCorr:
-            loss = 10*l_seg+l_pt+l_seg2pt+F.l1_loss(pred_c_seg, pred_c)
-        else:
-            loss = 10*l_seg+l_pt+l_seg2pt
         if self.disentangle:
-            loss = loss + conf_Loss(pred_ds, ID)
-        else    
-        
-            
-
+            # Disentanglement procedure
+            if self.toggle:
+                # Primary loss + alpha*confusion
+                if self.selfCorr:
+                    loss = 10*l_seg+l_pt+l_seg2pt+F.l1_loss(pred_c_seg, pred_c)
+                else:
+                    loss = 10*l_seg+l_pt+l_seg2pt
+                loss += self.disentangle_alpha*conf_Loss(pred_ds,
+                                                         ID.to(torch.long),
+                                                         self.toggle)
+            else:
+                # Secondary loss
+                loss = conf_Loss(pred_ds, ID.to(torch.long), self.toggle)
+        else:
+            # No disentanglement, proceed regularly
+            if self.selfCorr:
+                loss = 10*l_seg+l_pt+l_seg2pt+F.l1_loss(pred_c_seg, pred_c)
+            else:
+                loss = 10*l_seg+l_pt+l_seg2pt
         return op, latent, pred_c, pred_c_seg, loss
 
     def _initialize_weights(self):
