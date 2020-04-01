@@ -2,9 +2,9 @@
 
 path2ds="/home/rsk3900/Datasets/"
 epochs=100
-workers=10
-batchsize=50
-lr = 0.0001
+workers=9
+batchsize=18
+lr=0.0005
 
 # Load necessary modules
 spack load /7qmaaiw # Load OpenCV
@@ -33,7 +33,7 @@ do
             str+="--curObj=${curObj} --batchsize=${batchsize} --workers=${workers} --prec=32 --epochs=${epochs} "
             str+="--disp=0 --overfit=0 --lr=${lr} --selfCorr=${selfCorr} --disentangle=${disentangle}"
             echo -e $str > command.lock
-            sbatch -J ${baseJobName} -o "rc_log/${baseJobName}.o" -e "rc_log/${baseJobName}.e" --mem=16G --cpus-per-task=9 -p tier3 -A riteyes --gres=gpu:v100:1 -t 4-0:0:0 command.lock
+            sbatch -J ${baseJobName} -o "rc_log/${baseJobName}.o" -e "rc_log/${baseJobName}.e" --mem=16G --cpus-per-task=9 -p tier3 -A riteyes --gres=gpu:p4:2 -t 4-0:0:0 command.lock
         done
     done
 done

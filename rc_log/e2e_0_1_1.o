@@ -1,0 +1,20 @@
+------
+parsed arguments:
+{'batchsize': 16,
+ 'curObj': 0,
+ 'disentangle': 1,
+ 'disp': 0,
+ 'epochs': 100,
+ 'expname': 'e2e_0_1_1',
+ 'loadfile': '',
+ 'lr': 0.0001,
+ 'model': 'ritnet',
+ 'overfit': 0,
+ 'path2data': '/home/rsk3900/Datasets/',
+ 'prec': 32,
+ 'resume': 0,
+ 'selfCorr': 1,
+ 'workers': 8}
+Moving to a multiGPU setup.
+Total number of trainable parameters: 1606317
+
