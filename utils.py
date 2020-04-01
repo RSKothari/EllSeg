@@ -270,7 +270,7 @@ def lossandaccuracy(args, loader, model, alpha, device):
                                                               imInfo[:, 2].to(device).to(torch.long),
                                                               alpha)
             latent_codes.append(latent.detach().cpu())
-            loss = loss.mean()
+            loss = loss.mean() if args.useMultiGPU else loss
             epoch_loss.append(loss.item())
 
             ptDist = getPoint_metric(pupil_center.numpy(),

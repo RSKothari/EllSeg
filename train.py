@@ -70,10 +70,7 @@ if __name__ == '__main__':
         startEp = netDict['epoch'] if 'epoch' in netDict.keys() else 0
     else:
         startEp = 0
-
-    model = model if not args.useMultiGPU else torch.nn.DataParallel(model)
-    torch.save(model.state_dict() if not args.useMultiGPU else model.module.state_dict(),
-               os.path.join(path2model, args.model+'{}.pkl'.format('_init')))
+        torch.save(model.state_dict(), os.path.join(path2model, args.model+'{}.pkl'.format('_init')))
 
     nparams = get_nparams(model)
     print('Total number of trainable parameters: {}\n'.format(nparams))
@@ -103,6 +100,7 @@ if __name__ == '__main__':
     
     # Let the model know how many datasets it must expect
     model.setDatasetInfo(np.unique(trainObj.imList[:, 1]).size)
+    model = model if not args.useMultiGPU else torch.nn.DataParallel(model)
     model = model.to(device).to(args.prec)
 
     if args.overfit > 0:
@@ -145,7 +143,7 @@ if __name__ == '__main__':
                                                           imInfo[:, 2].to(device).to(torch.long), # Send archive one-hot
                                                           alpha)
 
-            loss = loss if args.useMultiGPU else loss.mean()
+            loss = loss.mean() if args.useMultiGPU else loss
             loss.backward()
             optimizer.step()
             #torch.cuda.empty_cache() # Clear cache for unused nodes
