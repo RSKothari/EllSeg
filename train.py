@@ -100,15 +100,15 @@ if __name__ == '__main__':
     validObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
     trainObj.augFlag = True
     validObj.augFlag = False
-    
+
     # Let the model know how many datasets it must expect
     model.setDatasetInfo(np.unique(trainObj.imList[:, 1]).size)
     model = model.to(device).to(args.prec)
 
     if args.overfit > 0:
         # This is a flag to check if attempting to overfit
-        trainObj.imList = trainObj.imList[:args.overfit*args.batchsize]
-        validObj.imList = validObj.imList[:args.overfit*args.batchsize]
+        trainObj.imList = trainObj.imList[:args.overfit*args.batchsize,:]
+        validObj.imList = validObj.imList[:args.overfit*args.batchsize,:]
 
     trainloader = DataLoader(trainObj,
                              batch_size=args.batchsize,
