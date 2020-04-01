@@ -40,6 +40,10 @@ class DataLoader_riteyes(Dataset):
         self.path2data = path2data
         self.size = size
         self.sort(sort)
+        
+        # Rank datasets by archive ID
+        dsnums = np.unique(self.imList[:, 1], return_inverse=True)[1]
+        self.imList = np.hstack([self.imList, dsnums[:, np.newaxis]])
 
     def sort(self, sort):
         if sort=='ordered':
@@ -120,7 +124,7 @@ class DataLoader_riteyes(Dataset):
             distMap[i, ...] = one_hot2dist(label.astype(np.uint8)==i)
 
         img = (img - img.mean())/img.std()
-        img = torch.from_numpy(img)
+        img = torch.from_numpy(img).unsqueeze(0) # Adds a singleton for channels
         label = MaskToTensor()(label)
         spatialWeights = torch.from_numpy(spatialWeights)
         distMap = torch.from_numpy(distMap)

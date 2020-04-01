@@ -170,21 +170,26 @@ class DenseNet2D(nn.Module):
                  growth=1.2,
                  actfunc=F.leaky_relu,
                  norm=nn.InstanceNorm2d,
-                 numSets=2,
-                 selfCorr=False):
+                 selfCorr=False,
+                 disentangle=False):
         super(DenseNet2D, self).__init__()
 
-        sizes = getSizes(chz, growth)
-        self.numSets = numSets
+        self.sizes = getSizes(chz, growth)
+        
         self.toggle = True
         self.selfCorr = selfCorr
-        self.disentangle_alpha = 1
+        self.disentangle = disentangle
+        self.disentangle_alpha = 0.1
 
         self.enc = DenseNet_encoder(in_c=1, chz=chz, actfunc=actfunc, growth=growth, norm=norm)
         self.dec = DenseNet_decoder(chz=chz, out_c=3, actfunc=actfunc, growth=growth, norm=norm)
-        self.bottleneck_lin = linStack(2, sizes['enc']['op'][-1], 64, 2, 0.0)
-        self.dsIdentify_lin = linStack(2, sizes['enc']['op'][-1], 64, numSets, 0.0)
+        self.bottleneck_lin = linStack(2, self.sizes['enc']['op'][-1], 64, 2, 0.0)
+        
         self._initialize_weights()
+        
+    def setDatasetInfo(self, numSets=2):
+        self.numSets = numSets
+        self.dsIdentify_lin = linStack(2, self.sizes['enc']['op'][-1], 64, numSets, 0.0)
 
     def forward(self, x, target, pupil_center, spatWts, distMap, cond, ID, alpha):
         '''

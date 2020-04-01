@@ -157,7 +157,7 @@ def getPoint_metric(y_true, y_pred, cond, sz, do_unnorm):
     return (np.sum(dist)/np.sum(flag) if np.any(flag) else np.nan,
             dist)
 
-def conf_Loss(self, x, gt, flag):
+def conf_Loss(x, gt, flag):
     '''
     x: Input predicted one-hot encoding for dataset identity
     gt: One-hot encoding of target classes
@@ -166,7 +166,7 @@ def conf_Loss(self, x, gt, flag):
     '''
     if flag:
         # If true, return the confusion loss
-        loss = torch.mean(torch.mean(-F.log_softmax(x), dim=1))
+        loss = torch.mean(torch.mean(-F.log_softmax(x, dim=1), dim=1))
     else:
         # Else, return the secondary loss
         loss = F.cross_entropy(x, gt)
@@ -267,7 +267,7 @@ def lossandaccuracy(args, loader, model, alpha, device):
                                                               spatialWeights.to(device).to(args.prec),
                                                               distMap.to(device).to(args.prec),
                                                               cond.to(device).to(args.prec),
-                                                              imInfo[:, 1],
+                                                              imInfo[:, 2].to(device).to(torch.long),
                                                               alpha)
             latent_codes.append(latent.detach().cpu())
             loss = loss.mean()
@@ -277,13 +277,13 @@ def lossandaccuracy(args, loader, model, alpha, device):
                                      pred_center.detach().cpu().numpy(),
                                      cond.numpy(),
                                      img.shape[2:],
-                                     True) # Unnormalizes the points
+                                     True)[0] # Unnormalizes the points
 
             ptDist_seg = getPoint_metric(pupil_center.numpy(),
                                          seg_center.detach().cpu().numpy(),
                                          cond.numpy(),
                                          img.shape[2:],
-                                         True) # Unnormalizes the points
+                                         True)[0] # Unnormalizes the points
             dists.append(ptDist)
             dists_seg.append(ptDist_seg)
 

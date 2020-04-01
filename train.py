@@ -32,6 +32,7 @@ if __name__ == '__main__':
         print('Moving to a multiGPU setup.')
         args.useMultiGPU = True
     else:
+        print('Single GPU setup')
         args.useMultiGPU = False
     torch.backends.cudnn.deterministic=False
 
@@ -55,6 +56,7 @@ if __name__ == '__main__':
 
     model = model_dict[args.model]
     model.selfCorr = args.selfCorr
+    model.disentangle = args.disentangle
 
     if args.resume:
         print ("NOTE resuming training")
@@ -70,7 +72,6 @@ if __name__ == '__main__':
         startEp = 0
 
     model = model if not args.useMultiGPU else torch.nn.DataParallel(model)
-    model = model.to(device).to(args.prec)
     torch.save(model.state_dict() if not args.useMultiGPU else model.module.state_dict(),
                os.path.join(path2model, args.model+'{}.pkl'.format('_init')))
 
@@ -99,6 +100,10 @@ if __name__ == '__main__':
     validObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
     trainObj.augFlag = True
     validObj.augFlag = False
+    
+    # Let the model know how many datasets it must expect
+    model.setDatasetInfo(np.unique(trainObj.imList[:, 1]).size)
+    model = model.to(device).to(args.prec)
 
     if args.overfit > 0:
         # This is a flag to check if attempting to overfit
@@ -137,7 +142,7 @@ if __name__ == '__main__':
                                                           spatialWeights.to(device).to(args.prec),
                                                           distMap.to(device).to(args.prec),
                                                           cond.to(device).to(args.prec),
-                                                          imInfo[:, 1], # Send archive number
+                                                          imInfo[:, 2].to(device).to(torch.long), # Send archive one-hot
                                                           alpha)
 
             loss = loss if args.useMultiGPU else loss.mean()
@@ -216,10 +221,11 @@ if __name__ == '__main__':
                                          'iris':ious[1],
                                          'pupil':ious[2]}, epoch)
         writer.add_image('train/op', dispI, epoch)
-        if epoch%embed_log:
+        if epoch%embed_log == 0:
+            print('Saving embeddings ...')
             writer.add_embedding(torch.cat(latent_codes, 0),
-                                 labels=validObj.imList[:, 1],
-                                 gloal_step=epoch)
+                                 metadata=validObj.imList[:, 1],
+                                 global_step=epoch)
 
         for name, param in model.named_parameters():
             writer.add_histogram(name, param.clone().cpu().data.numpy(), epoch)
@@ -240,6 +246,7 @@ if __name__ == '__main__':
             break
 
         ##save the model every epoch
+        model.toggle = not model.toggle
         if epoch %5 == 0:
             torch.save(netDict if not args.useMultiGPU else model.module.state_dict(),
                        os.path.join(path2model, args.model+'_{}.pkl'.format(epoch)))

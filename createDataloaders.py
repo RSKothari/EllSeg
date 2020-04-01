@@ -30,8 +30,8 @@ print('Subsets selected ---------')
 print(subsets_present)
 
 dataDiv_obj = CurLib.generate_fileList(AllDS, mode = 'vanilla', notest=True)
-trainObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'train', True, (480, 640), 0.5)
-validObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'valid', False, (480, 640), 0.5)
+trainObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'train', True, (480, 640), scale=0.5)
+validObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'valid', False, (480, 640), scale=0.5)
 
 # Test on OpenEDS, NVGaze
 datasets = ['NVGaze', 'OpenEDS']
@@ -79,8 +79,8 @@ print('Subsets selected ---------')
 print(subsets_present)
 
 dataDiv_obj = CurLib.generate_fileList(AllDS, mode = 'vanilla', notest=True)
-trainObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'train', True, (480, 640), 0.5)
-validObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'valid', False, (480, 640), 0.5)
+trainObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'train', True, (480, 640), scale=0.5)
+validObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'valid', False, (480, 640), scale=0.5)
 
 # Test on OpenEDS, NVGaze, LPW
 datasets = ['NVGaze', 'OpenEDS', 'LPW']
@@ -130,8 +130,8 @@ print('Subsets selected ---------')
 print(subsets_present)
 
 dataDiv_obj = CurLib.generate_fileList(AllDS, mode = 'vanilla', notest=True)
-trainObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'train', True, (480, 640), 0.5)
-validObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'valid', False, (480, 640), 0.5)
+trainObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'train', True, (480, 640), scale=0.5)
+validObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'valid', False, (480, 640), scale=0.5)
 
 # Test on OpenEDS, NVGaze, LPW, S-General
 datasets = ['NVGaze', 'OpenEDS', 'LPW', 'riteyes_general']
