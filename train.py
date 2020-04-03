@@ -50,6 +50,14 @@ if __name__ == '__main__':
     os.makedirs(path2model, exist_ok=True)
     os.makedirs(path2checkpoint, exist_ok=True)
     os.makedirs(path2writer, exist_ok=True)
+    
+    f = open(os.path.join('curObjects', 'cond_'+str(args.curObj)+'.pkl'), 'rb')
+
+    trainObj, validObj, _ = pickle.load(f)
+    trainObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
+    validObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
+    trainObj.augFlag = True
+    validObj.augFlag = False
 
     writer = SummaryWriter(path2writer)
     logger = Logger(os.path.join(LOGDIR,'logs.log'))
@@ -57,6 +65,12 @@ if __name__ == '__main__':
     model = model_dict[args.model]
     model.selfCorr = args.selfCorr
     model.disentangle = args.disentangle
+    
+    # Let the model know how many datasets it must expect
+    if args.disentangle:
+        model.setDatasetInfo(np.unique(trainObj.imList[:, 1]).size)
+    model = model if not args.useMultiGPU else torch.nn.DataParallel(model)
+    model = model.to(device).to(args.prec)
 
     if args.resume:
         print ("NOTE resuming training")
@@ -90,18 +104,6 @@ if __name__ == '__main__':
                                    fName='checkpoint.pt',
                                    path2save=path2checkpoint)
 
-    f = open(os.path.join('curObjects', 'cond_'+str(args.curObj)+'.pkl'), 'rb')
-
-    trainObj, validObj, _ = pickle.load(f)
-    trainObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
-    validObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
-    trainObj.augFlag = True
-    validObj.augFlag = False
-    
-    # Let the model know how many datasets it must expect
-    model.setDatasetInfo(np.unique(trainObj.imList[:, 1]).size)
-    model = model if not args.useMultiGPU else torch.nn.DataParallel(model)
-    model = model.to(device).to(args.prec)
 
     if args.overfit > 0:
         # This is a flag to check if attempting to overfit
