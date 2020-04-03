@@ -17,11 +17,10 @@ import numpy as np
 import scipy.io as scio
 
 from data_augment import augment
-from torchvision import transforms
 from torch.utils.data import Dataset
 
 from sklearn.model_selection import StratifiedKFold, train_test_split
-from helperfunctions import simple_string, one_hot2dist
+from helperfunctions import simple_string, one_hot2dist, extract_datasets
 from helperfunctions import my_ellipse, pad2Size
 
 class MaskToTensor(object):
@@ -40,9 +39,10 @@ class DataLoader_riteyes(Dataset):
         self.path2data = path2data
         self.size = size
         self.sort(sort)
-        
+
         # Rank datasets by archive ID
-        dsnums = np.unique(self.imList[:, 1], return_inverse=True)[1]
+        #dsnums = np.unique(self.imList[:, 1], return_inverse=True)[1]
+        dsnums = extract_datasets()[1] # Each entry will be mapped to a dataset ID
         self.imList = np.hstack([self.imList, dsnums[:, np.newaxis]])
 
     def sort(self, sort):
@@ -131,7 +131,7 @@ class DataLoader_riteyes(Dataset):
         cond = torch.from_numpy(cond)
         pupil_center = torch.from_numpy(pupil_center).to(torch.float)
         imInfo = torch.from_numpy(imInfo)
-        
+
         return (img, label, spatialWeights, distMap, pupil_center, cond, imInfo)
 
     def readImage(self, idx):

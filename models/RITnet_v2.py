@@ -175,7 +175,7 @@ class DenseNet2D(nn.Module):
         super(DenseNet2D, self).__init__()
 
         self.sizes = getSizes(chz, growth)
-        
+
         self.toggle = True
         self.selfCorr = selfCorr
         self.disentangle = disentangle
@@ -188,24 +188,21 @@ class DenseNet2D(nn.Module):
                                            hidden_dim=64,
                                            out_dim=2,
                                            dp=0.0)
-        
         self._initialize_weights()
-        
+
     def setDatasetInfo(self, numSets=2):
+        # Produces a 1 layered MLP which directly maps
         self.numSets = numSets
-        self.dsIdentify_lin = linStack(2, self.sizes['enc']['op'][-1], 64, numSets, 0.0)
+        self.dsIdentify_lin = linStack(num_layers=1, in_dim=self.sizes['enc']['op'][-1], hidden_dim=64, out_dim=numSets, dp=0.0)
 
     def forward(self, x, target, pupil_center, spatWts, distMap, cond, ID, alpha):
         '''
         ID: A Tensor containing information about the dataset or subset a entry
         belongs to.
         '''
-        #ID_onehot = [torch.zeros(self.numSets, )[ID[i] == 1] for i in range(0, x.shape[0])]
-        #ID_onehot = torch.stack(ID_onehot, dim=0) # [B, self.numSets]
         x4, x3, x2, x1, x = self.enc(x)
         latent = torch.mean(x.flatten(start_dim=2), -1) # [B, features]
         pred_c = self.bottleneck_lin(latent)
-        
         op = self.dec(x4, x3, x2, x1, x)
 
         # Compute seg losses

@@ -20,7 +20,9 @@ from utils import getSeg_metrics, getPoint_metric, generateImageGrid, unnormPts
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 #%%
+os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE" # Deactive file locking
 embed_log = 5
+EPS=1e-7
 
 if __name__ == '__main__':
 
@@ -62,6 +64,15 @@ if __name__ == '__main__':
     writer = SummaryWriter(path2writer)
     logger = Logger(os.path.join(LOGDIR,'logs.log'))
 
+    f = open(os.path.join('curObjects', 'cond_'+str(args.curObj)+'.pkl'), 'rb')
+
+    trainObj, validObj, _ = pickle.load(f)
+    trainObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
+    validObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
+    trainObj.augFlag = True
+    validObj.augFlag = False
+
+    # Ensure model has all necessary weights initialized
     model = model_dict[args.model]
     model.selfCorr = args.selfCorr
     model.disentangle = args.disentangle
@@ -71,6 +82,17 @@ if __name__ == '__main__':
         model.setDatasetInfo(np.unique(trainObj.imList[:, 1]).size)
     model = model if not args.useMultiGPU else torch.nn.DataParallel(model)
     model = model.to(device).to(args.prec)
+
+    param_list = [param for name, param in model.named_parameters() if 'dsIdentify' not in name]
+    optimizer = torch.optim.Adam([{'params':param_list,
+                                   'lr':args.lr}]) # Set optimizer
+
+    # Let the network you need a disentanglement module.
+    # Please refer to args.py for more information on disentanglement strategy
+    if args.disentangle:
+        # Let the model know how many datasets it must expect
+        model.setDatasetInfo(np.unique(trainObj.imList[:, 2]).size)
+        opt_disent = torch.optim.Adam(model.dsIdentify_lin.parameters(), lr=10*args.lr)
 
     if args.resume:
         print ("NOTE resuming training")
@@ -83,13 +105,15 @@ if __name__ == '__main__':
         model.load_state_dict(netDict['state_dict'])
         startEp = netDict['epoch'] if 'epoch' in netDict.keys() else 0
     else:
+        # If the very first epoch, then save out an _init pickle
+        # This is particularly useful for lottery tickets
         startEp = 0
         torch.save(model.state_dict(), os.path.join(path2model, args.model+'{}.pkl'.format('_init')))
 
     nparams = get_nparams(model)
     print('Total number of trainable parameters: {}\n'.format(nparams))
 
-    optimizer = torch.optim.Adam(model.parameters(), lr = args.lr)
+
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
                                                            'max',
                                                            patience=5,
@@ -104,11 +128,13 @@ if __name__ == '__main__':
                                    fName='checkpoint.pt',
                                    path2save=path2checkpoint)
 
+    model = model if not args.useMultiGPU else torch.nn.DataParallel(model)
+    model = model.to(device).to(args.prec) # NOTE: good habit to do this before optimizer
 
     if args.overfit > 0:
         # This is a flag to check if attempting to overfit
-        trainObj.imList = trainObj.imList[:args.overfit*args.batchsize]
-        validObj.imList = validObj.imList[:args.overfit*args.batchsize]
+        trainObj.imList = trainObj.imList[:args.overfit*args.batchsize,:]
+        validObj.imList = validObj.imList[:args.overfit*args.batchsize,:]
 
     trainloader = DataLoader(trainObj,
                              batch_size=args.batchsize,
@@ -134,8 +160,36 @@ if __name__ == '__main__':
 
         for bt, batchdata in enumerate(trainloader):
             img, labels, spatialWeights, distMap, pupil_center, cond, imInfo = batchdata
+            model.toggle = False
             optimizer.zero_grad()
+            opt_disent.zero_grad()
 
+            # Disentanglement procedure. Toggle should always be False.
+            if args.disentangle:
+                while model.toggle:
+                    # Freeze unrequired weights
+                    for name, param in model.named_parameters():
+                        if 'dsIdentify_lin' not in name:
+                            # Freeze all unnecessary weights
+                            param.requires_grad=False
+
+                    # Keep forward passing until secondary is finetuned
+                    output, _, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
+                                                          labels.to(device).long(),
+                                                          pupil_center.to(device).to(args.prec),
+                                                          spatialWeights.to(device).to(args.prec),
+                                                          distMap.to(device).to(args.prec),
+                                                          cond.to(device).to(args.prec),
+                                                          imInfo[:, 2].to(device).to(torch.long), # Send archive one-hot
+                                                          alpha)
+                    loss.backward()
+                    opt_disent.step()
+                    grad = torch.mean(model.dsIdentify_lin.layersLin[0].weight.grad.data.detach())
+                    print(grad)
+                    model.toggle = True if grad < EPS else False
+
+            for name, param in model.named_parameters():
+                param.requires_grad = False if 'dsIdentify_lin' in name else True
             output, _, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
                                                           labels.to(device).long(),
                                                           pupil_center.to(device).to(args.prec),
@@ -246,7 +300,6 @@ if __name__ == '__main__':
             break
 
         ##save the model every epoch
-        model.toggle = not model.toggle
         if epoch %5 == 0:
             torch.save(netDict if not args.useMultiGPU else model.module.state_dict(),
                        os.path.join(path2model, args.model+'_{}.pkl'.format(epoch)))
