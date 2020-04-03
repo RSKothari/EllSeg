@@ -175,7 +175,7 @@ class DenseNet2D(nn.Module):
         super(DenseNet2D, self).__init__()
 
         self.sizes = getSizes(chz, growth)
-        
+
         self.toggle = True
         self.selfCorr = selfCorr
         self.disentangle = disentangle
@@ -184,12 +184,13 @@ class DenseNet2D(nn.Module):
         self.enc = DenseNet_encoder(in_c=1, chz=chz, actfunc=actfunc, growth=growth, norm=norm)
         self.dec = DenseNet_decoder(chz=chz, out_c=3, actfunc=actfunc, growth=growth, norm=norm)
         self.bottleneck_lin = linStack(2, self.sizes['enc']['op'][-1], 64, 2, 0.0)
-        
+
         self._initialize_weights()
-        
+
     def setDatasetInfo(self, numSets=2):
+        # Produces a 1 layered MLP which directly maps
         self.numSets = numSets
-        self.dsIdentify_lin = linStack(2, self.sizes['enc']['op'][-1], 64, numSets, 0.0)
+        self.dsIdentify_lin = linStack(1, self.sizes['enc']['op'][-1], 64, numSets, 0.0)
 
     def forward(self, x, target, pupil_center, spatWts, distMap, cond, ID, alpha):
         '''
@@ -201,7 +202,7 @@ class DenseNet2D(nn.Module):
         x4, x3, x2, x1, x = self.enc(x)
         latent = torch.mean(x.flatten(start_dim=2), -1) # [B, features]
         pred_c = self.bottleneck_lin(latent)
-        pred_ds = self.dsIdentify_lin(latent)
+
         op = self.dec(x4, x3, x2, x1, x)
 
         # Compute seg losses
@@ -212,6 +213,7 @@ class DenseNet2D(nn.Module):
                                                       target.shape[1:]), 1, cond)
 
         if self.disentangle:
+            pred_ds = self.dsIdentify_lin(latent)
             # Disentanglement procedure
             if self.toggle:
                 # Primary loss + alpha*confusion

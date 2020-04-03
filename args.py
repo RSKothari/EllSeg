@@ -4,6 +4,12 @@
 Created on Sun Mar  1 16:28:20 2020
 
 @author: rakshit
+
+Input options:
+    disentagle: 0, 1, 2 [None, Zisserman, GradientReversal]
+    overfit: 0 [None, int > 0 is the # of batches you want to experiment]
+    selfCorr: 0, 1 [None, self consistency loss active]
+    disp: 0, 1 [Display output during training to visualize process]
 """
 
 from pprint import pprint
@@ -37,7 +43,7 @@ def parse_args():
     parser.add_argument('--workers', type=int, default=6, help='number of workers')
     parser.add_argument('--overfit', type=int, default=400, help='overfit to N batches?')
     parser.add_argument('--selfCorr', type=int, default=1, help='self regulation?')
-    parser.add_argument('--disentangle', type=int, default=1, help='Explicit dataset bias removal?')
+    parser.add_argument('--disentangle', type=int, default=0, help='Explicit dataset bias removal?')
 
     args = parser.parse_args()
     opt = vars(args)

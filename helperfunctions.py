@@ -158,12 +158,9 @@ class my_ellipse():
                 y.append((y1, y2))
             y_r = np.array(list(chain(*y))) + self.param[1]
             x_r = np.array(list(chain(*x))) + self.param[0]
-            #x_r = x_r[[0, 1, 4, 5]]
-            #y_r = y_r[[0, 1, 4, 5]]
 
         elif mode == 'equiAngle':
 
-            #T = 0.5*np.pi*np.array([-1.5, -0.5, 0.5, 1.5])
             T = 0.5*np.pi*np.array([-1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2])
             N = len(T)
             x = self.param[2]*np.cos(T)
@@ -171,11 +168,6 @@ class my_ellipse():
             H_rot = rotation_2d(-self.param[-1])
             X1 = H_rot.dot(np.stack([x, y, np.ones(N, )], axis=0))
 
-            #slopes = -(2*alpha*X1[0, :] + gamma*X1[1, :])/(2*beta*X1[1, :] + gamma*X1[0, :])
-            #print(X1)
-            #print(slopes)
-            #print('---')
-            #loc = np.argsort(slopes)
             x_r = X1[0, :] + self.param[0]
             y_r = X1[1, :] + self.param[1]
 
@@ -475,6 +467,14 @@ def stackall_Dict(D):
         elif type(D[key]) is dict:
             stackall_Dict(D[key])
     return D
+
+def extract_datasets(subsets):
+    '''
+    subsets: contains an array of strings
+    '''
+    ds_idx = [str(ele).split('_')[0] for ele in np.nditer(subsets)]
+    ds_present, ds_id = np.unique(ds_idx, return_inverse=True)
+    return ds_present, ds_id
 
 # Data extraction helpers
 

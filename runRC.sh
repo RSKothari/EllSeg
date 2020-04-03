@@ -28,7 +28,7 @@ do
     do
         for disentangle in "${disentangle_list[@]}"
         do
-            baseJobName="e2e_${curObj}_${selfCorr}_${disentangle}"
+            baseJobName="RC_e2e_${curObj}_${selfCorr}_${disentangle}"
             str="#!/bin/bash\npython3 train.py --path2data=${path2ds} --expname=${baseJobName} "
             str+="--curObj=${curObj} --batchsize=${batchsize} --workers=${workers} --prec=32 --epochs=${epochs} "
             str+="--disp=0 --overfit=0 --lr=${lr} --selfCorr=${selfCorr} --disentangle=${disentangle}"
