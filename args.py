@@ -43,7 +43,7 @@ def parse_args():
     parser.add_argument('--workers', type=int, default=6, help='number of workers')
     parser.add_argument('--overfit', type=int, default=400, help='overfit to N batches?')
     parser.add_argument('--selfCorr', type=int, default=1, help='self regulation?')
-    parser.add_argument('--disentangle', type=int, default=0, help='Explicit dataset bias removal?')
+    parser.add_argument('--disentangle', type=int, default=1, help='Explicit dataset bias removal?')
 
     args = parser.parse_args()
     opt = vars(args)

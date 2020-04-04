@@ -30,7 +30,7 @@ if __name__ == '__main__':
 
     device=torch.device("cuda")
     torch.cuda.manual_seed(12)
-    if torch.cuda.device_count() > 1:
+    if False:#torch.cuda.device_count() > 1:
         print('Moving to a multiGPU setup.')
         args.useMultiGPU = True
     else:
@@ -80,9 +80,7 @@ if __name__ == '__main__':
     # Let the model know how many datasets it must expect
     if args.disentangle:
         model.setDatasetInfo(np.unique(trainObj.imList[:, 1]).size)
-    model = model if not args.useMultiGPU else torch.nn.DataParallel(model)
-    model = model.to(device).to(args.prec)
-
+        
     param_list = [param for name, param in model.named_parameters() if 'dsIdentify' not in name]
     optimizer = torch.optim.Adam([{'params':param_list,
                                    'lr':args.lr}]) # Set optimizer
@@ -92,7 +90,8 @@ if __name__ == '__main__':
     if args.disentangle:
         # Let the model know how many datasets it must expect
         model.setDatasetInfo(np.unique(trainObj.imList[:, 2]).size)
-        opt_disent = torch.optim.Adam(model.dsIdentify_lin.parameters(), lr=10*args.lr)
+        opt_disent = torch.optim.Adam(model.dsIdentify_lin.parameters(), lr=0.1*args.lr)
+        model._initialize_weights() # Re-init weights
 
     if args.resume:
         print ("NOTE resuming training")
@@ -166,30 +165,39 @@ if __name__ == '__main__':
 
             # Disentanglement procedure. Toggle should always be False.
             if args.disentangle:
-                while model.toggle:
+                for name, param in model.named_parameters():
                     # Freeze unrequired weights
-                    for name, param in model.named_parameters():
-                        if 'dsIdentify_lin' not in name:
-                            # Freeze all unnecessary weights
-                            param.requires_grad=False
-
+                    if 'dsIdentify_lin' not in name:
+                        # Freeze all unnecessary weights
+                        param.requires_grad=False
+                    else:
+                        param.requires_grad=True
+                    
+                count = 0
+                val = 100
+                while not model.toggle:# and epoch > 1:
+                    
                     # Keep forward passing until secondary is finetuned
                     output, _, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
-                                                          labels.to(device).long(),
-                                                          pupil_center.to(device).to(args.prec),
-                                                          spatialWeights.to(device).to(args.prec),
-                                                          distMap.to(device).to(args.prec),
-                                                          cond.to(device).to(args.prec),
-                                                          imInfo[:, 2].to(device).to(torch.long), # Send archive one-hot
-                                                          alpha)
+                                                                      labels.to(device).long(),
+                                                                      pupil_center.to(device).to(args.prec),
+                                                                      spatialWeights.to(device).to(args.prec),
+                                                                      distMap.to(device).to(args.prec),
+                                                                      cond.to(device).to(args.prec),
+                                                                      imInfo[:, 2].to(device).to(torch.long), # Send archive one-hot
+                                                                      alpha)
                     loss.backward()
                     opt_disent.step()
-                    grad = torch.mean(model.dsIdentify_lin.layersLin[0].weight.grad.data.detach())
-                    print(grad)
-                    model.toggle = True if grad < EPS else False
-
-            for name, param in model.named_parameters():
-                param.requires_grad = False if 'dsIdentify_lin' in name else True
+                    #val = [param.grad.abs().mean().item() for name, param in model.named_parameters() if 'dsIdentify_lin' in name]
+                    #val = np.mean(val)
+                    diff = val - loss.detach().item()
+                    val = loss.detach().item()
+                    count+=1
+                    model.toggle = True if diff < EPS else False
+                for name, param in model.named_parameters():
+                    param.requires_grad = False if 'dsIdentify_lin' in name else True
+            
+            model.toggle = True
             output, _, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
                                                           labels.to(device).long(),
                                                           pupil_center.to(device).to(args.prec),

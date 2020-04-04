@@ -187,13 +187,21 @@ class DenseNet2D(nn.Module):
                                            in_dim=self.sizes['enc']['op'][-1],
                                            hidden_dim=64,
                                            out_dim=2,
+                                           bias=True,
+                                           actBool=True,
                                            dp=0.0)
         self._initialize_weights()
 
     def setDatasetInfo(self, numSets=2):
         # Produces a 1 layered MLP which directly maps
         self.numSets = numSets
-        self.dsIdentify_lin = linStack(num_layers=1, in_dim=self.sizes['enc']['op'][-1], hidden_dim=64, out_dim=numSets, dp=0.0)
+        self.dsIdentify_lin = linStack(num_layers=2,
+                                       in_dim=self.sizes['enc']['op'][-1],
+                                       hidden_dim=64,
+                                       out_dim=numSets,
+                                       bias=True,
+                                       actBool=False,
+                                       dp=0.0)
 
     def forward(self, x, target, pupil_center, spatWts, distMap, cond, ID, alpha):
         '''

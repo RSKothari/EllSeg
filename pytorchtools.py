@@ -162,22 +162,23 @@ class linStack(torch.nn.Module):
         hidden_dim: the size of the hidden layers.
         out_dim: the size of the output.
     """
-    def __init__(self, num_layers, in_dim, hidden_dim, out_dim, dp):
+    def __init__(self, num_layers, in_dim, hidden_dim, out_dim, bias, actBool, dp):
         super().__init__()
 
         layers_lin = []
         for i in range(num_layers):
             m = torch.nn.Linear(hidden_dim if i > 0 else in_dim,
-                hidden_dim if i < num_layers - 1 else out_dim)
+                hidden_dim if i < num_layers - 1 else out_dim, bias=bias)
             layers_lin.append(m)
         self.layersLin = torch.nn.ModuleList(layers_lin)
         self.act_func = torch.nn.SELU()
+        self.actBool = actBool
         self.dp = torch.nn.Dropout(p=dp)
 
     def forward(self, x):
         # Input shape (batch, features, *)
         for i, _ in enumerate(self.layersLin):
+            x = self.act_func(x) if self.actBool else x
             x = self.layersLin[i](x)
-            x = self.act_func(x)
             x = self.dp(x)
         return x

@@ -42,7 +42,7 @@ class DataLoader_riteyes(Dataset):
 
         # Rank datasets by archive ID
         #dsnums = np.unique(self.imList[:, 1], return_inverse=True)[1]
-        dsnums = extract_datasets()[1] # Each entry will be mapped to a dataset ID
+        dsnums = extract_datasets(self.arch[self.imList[:, 1]])[1] # Each entry will be mapped to a dataset ID
         self.imList = np.hstack([self.imList, dsnums[:, np.newaxis]])
 
     def sort(self, sort):
