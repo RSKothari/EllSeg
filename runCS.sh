@@ -1,5 +1,5 @@
 #!/bin/bash
-cond=2
+cond=0
 selfCorr=1
 expname1="CS_e2e_${cond}_${selfCorr}_0"
 expname2="CS_e2e_${cond}_${selfCorr}_1"

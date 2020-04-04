@@ -30,7 +30,7 @@ if __name__ == '__main__':
 
     device=torch.device("cuda")
     torch.cuda.manual_seed(12)
-    if torch.cuda.device_count() > 1:
+    if False:#torch.cuda.device_count() > 1:
         print('Moving to a multiGPU setup.')
         args.useMultiGPU = True
     else:
@@ -149,10 +149,10 @@ if __name__ == '__main__':
             img, labels, spatialWeights, distMap, pupil_center, cond, imInfo = batchdata
             model.toggle = False
             optimizer.zero_grad()
-            opt_disent.zero_grad()
-
+            
             # Disentanglement procedure. Toggle should always be False upon entry.
             if args.disentangle:
+                opt_disent.zero_grad()
                 for name, param in model.named_parameters():
                     # Freeze unrequired weights
                     if 'dsIdentify_lin' not in name:
@@ -272,7 +272,7 @@ if __name__ == '__main__':
         if epoch%embed_log == 0:
             print('Saving embeddings ...')
             writer.add_embedding(torch.cat(latent_codes, 0),
-                                 metadata=validObj.imList[:len(latent_codes), 2],
+                                 metadata=validObj.imList[:len(latent_codes)*args.batchsize, 2],
                                  global_step=epoch)
 
         for name, param in model.named_parameters():
