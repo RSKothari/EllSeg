@@ -85,6 +85,7 @@ if __name__ == '__main__':
     if args.resume:
         print ("NOTE resuming training. Priority: 1) Checkpoint 2) Epoch #")
         model  = model.to(device)
+        checkpointfile = os.path.join(checkpointfile, 'checkpoint.pt')
         netDict = load_from_file([path2checkpoint, args.loadfile])
         model.load_state_dict(netDict['state_dict'])
         startEp = netDict['epoch'] if 'epoch' in netDict.keys() else 0
@@ -278,13 +279,13 @@ if __name__ == '__main__':
         f = 'Epoch:{}, Valid Loss: {:.3f}, mIoU: {}'
         logger.write(f.format(epoch, lossvalid, np.mean(ious)))
 
-        scoreTracker = np.mean(ious) + 2 - 2.5e-3*(np.nanmean(dists) + np.nanmean(dists_seg)) # Max value 3
-        scheduler.step(scoreTracker)
-        early_stopping(scoreTracker, model.state_dict() if not args.useMultiGPU else model.module.state_dict())
-
+        # Generate a model dictionary which stores epochs and current state
         netDict = {'state_dict':[], 'epoch': epoch}
         netDict['state_dict'] = model.state_dict() if not args.useMultiGPU else model.module.state_dict()
 
+        scoreTracker = np.mean(ious) + 2 - 2.5e-3*(np.nanmean(dists) + np.nanmean(dists_seg)) # Max value 3
+        scheduler.step(scoreTracker)
+        early_stopping(scoreTracker, netDict)
         if early_stopping.early_stop:
             torch.save(netDict, os.path.join(path2model, args.model + 'earlystop_{}.pkl'.format(epoch)))
             print("Early stopping")
