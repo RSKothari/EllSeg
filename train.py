@@ -10,10 +10,10 @@ import matplotlib.pyplot as plt
 
 from args import parse_args
 from modelSummary import model_dict
-from pytorchtools import EarlyStopping
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 from helperfunctions import mypause, linVal
+from pytorchtools import EarlyStopping, load_from_file
 from utils import get_nparams, Logger, get_predictions, lossandaccuracy
 from utils import getSeg_metrics, getPoint_metric, generateImageGrid, unnormPts
 
@@ -52,7 +52,7 @@ if __name__ == '__main__':
     os.makedirs(path2model, exist_ok=True)
     os.makedirs(path2checkpoint, exist_ok=True)
     os.makedirs(path2writer, exist_ok=True)
-    
+
     f = open(os.path.join('curObjects', 'cond_'+str(args.curObj)+'.pkl'), 'rb')
 
     trainObj, validObj, _ = pickle.load(f)
@@ -68,7 +68,7 @@ if __name__ == '__main__':
     model = model_dict[args.model]
     model.selfCorr = args.selfCorr
     model.disentangle = args.disentangle
-        
+
     param_list = [param for name, param in model.named_parameters() if 'dsIdentify' not in name]
     optimizer = torch.optim.Adam([{'params':param_list,
                                    'lr':args.lr}]) # Set optimizer
@@ -83,13 +83,9 @@ if __name__ == '__main__':
         model._initialize_weights() # Re-init weights with new branch
 
     if args.resume:
-        print ("NOTE resuming training")
+        print ("NOTE resuming training. Priority: 1) Checkpoint 2) Epoch #")
         model  = model.to(device)
-        filename = args.loadfile
-        if not os.path.exists(filename):
-            print("model path not found!")
-            sys.exit(1)
-        netDict = torch.load(filename)
+        netDict = load_from_file([path2checkpoint, args.loadfile])
         model.load_state_dict(netDict['state_dict'])
         startEp = netDict['epoch'] if 'epoch' in netDict.keys() else 0
     else:
@@ -100,7 +96,7 @@ if __name__ == '__main__':
 
     nparams = get_nparams(model)
     print('Total number of trainable parameters: {}\n'.format(nparams))
-    
+
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
                                                            'max',
                                                            patience=5,
@@ -149,7 +145,7 @@ if __name__ == '__main__':
             img, labels, spatialWeights, distMap, pupil_center, cond, imInfo = batchdata
             model.toggle = False
             optimizer.zero_grad()
-            
+
             # Disentanglement procedure. Toggle should always be False upon entry.
             if args.disentangle:
                 opt_disent.zero_grad()
@@ -160,7 +156,7 @@ if __name__ == '__main__':
                         param.requires_grad=False
                     else:
                         param.requires_grad=True
-                    
+
                 val = 100 # Random large value
                 while not model.toggle:
                     # Keep forward passing until secondary is finetuned
@@ -180,11 +176,11 @@ if __name__ == '__main__':
                     diff = val - loss.detach().item() # Loss derivative
                     val = loss.detach().item() # Update previous loss value
                     model.toggle = True if diff < EPS else False
-                
+
                 # Switch the parameters which requires gradients
                 for name, param in model.named_parameters():
                     param.requires_grad = False if 'dsIdentify_lin' in name else True
-            
+
             model.toggle = True # This must always be true to optimize primary + conf loss
             output, _, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
                                                           labels.to(device).long(),
