@@ -30,7 +30,7 @@ if __name__ == '__main__':
 
     device=torch.device("cuda")
     torch.cuda.manual_seed(12)
-    if False:#torch.cuda.device_count() > 1:
+    if torch.cuda.device_count() > 1:
         print('Moving to a multiGPU setup.')
         args.useMultiGPU = True
     else:
@@ -172,6 +172,7 @@ if __name__ == '__main__':
                                                                       cond.to(device).to(args.prec),
                                                                       imInfo[:, 2].to(device).to(torch.long), # Send DS #
                                                                       alpha)
+                    loss = loss.mean() if args.useMultiGPU else loss
                     loss.backward()
                     opt_disent.step()
                     #val = [param.grad.abs().mean().item() for name, param in model.named_parameters() if 'dsIdentify_lin' in name]
