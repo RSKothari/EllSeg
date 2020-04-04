@@ -21,7 +21,7 @@ sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 #%%
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE" # Deactive file locking
-embed_log = 5
+embed_log = 2
 EPS=1e-7
 
 if __name__ == '__main__':
@@ -30,13 +30,13 @@ if __name__ == '__main__':
 
     device=torch.device("cuda")
     torch.cuda.manual_seed(12)
-    if False:#torch.cuda.device_count() > 1:
+    if torch.cuda.device_count() > 1:
         print('Moving to a multiGPU setup.')
         args.useMultiGPU = True
     else:
         print('Single GPU setup')
         args.useMultiGPU = False
-    torch.backends.cudnn.deterministic=False
+    torch.backends.cudnn.deterministic=True
 
     if args.model not in model_dict:
         print ("Model not found.")
@@ -64,22 +64,10 @@ if __name__ == '__main__':
     writer = SummaryWriter(path2writer)
     logger = Logger(os.path.join(LOGDIR,'logs.log'))
 
-    f = open(os.path.join('curObjects', 'cond_'+str(args.curObj)+'.pkl'), 'rb')
-
-    trainObj, validObj, _ = pickle.load(f)
-    trainObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
-    validObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
-    trainObj.augFlag = True
-    validObj.augFlag = False
-
     # Ensure model has all necessary weights initialized
     model = model_dict[args.model]
     model.selfCorr = args.selfCorr
     model.disentangle = args.disentangle
-    
-    # Let the model know how many datasets it must expect
-    if args.disentangle:
-        model.setDatasetInfo(np.unique(trainObj.imList[:, 1]).size)
         
     param_list = [param for name, param in model.named_parameters() if 'dsIdentify' not in name]
     optimizer = torch.optim.Adam([{'params':param_list,
@@ -89,9 +77,10 @@ if __name__ == '__main__':
     # Please refer to args.py for more information on disentanglement strategy
     if args.disentangle:
         # Let the model know how many datasets it must expect
+        print('Total # of datasets found: {}'.format(np.unique(trainObj.imList[:, 2]).size))
         model.setDatasetInfo(np.unique(trainObj.imList[:, 2]).size)
         opt_disent = torch.optim.Adam(model.dsIdentify_lin.parameters(), lr=0.1*args.lr)
-        model._initialize_weights() # Re-init weights
+        model._initialize_weights() # Re-init weights with new branch
 
     if args.resume:
         print ("NOTE resuming training")
@@ -111,8 +100,7 @@ if __name__ == '__main__':
 
     nparams = get_nparams(model)
     print('Total number of trainable parameters: {}\n'.format(nparams))
-
-
+    
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
                                                            'max',
                                                            patience=5,
@@ -144,7 +132,7 @@ if __name__ == '__main__':
                              batch_size=args.batchsize,
                              shuffle=False,
                              num_workers=args.workers,
-                             drop_last=False)
+                             drop_last=True)
 
     if args.disp:
         fig, axs = plt.subplots(nrows=1, ncols=1)
@@ -163,7 +151,7 @@ if __name__ == '__main__':
             optimizer.zero_grad()
             opt_disent.zero_grad()
 
-            # Disentanglement procedure. Toggle should always be False.
+            # Disentanglement procedure. Toggle should always be False upon entry.
             if args.disentangle:
                 for name, param in model.named_parameters():
                     # Freeze unrequired weights
@@ -173,10 +161,8 @@ if __name__ == '__main__':
                     else:
                         param.requires_grad=True
                     
-                count = 0
-                val = 100
-                while not model.toggle:# and epoch > 1:
-                    
+                val = 100 # Random large value
+                while not model.toggle:
                     # Keep forward passing until secondary is finetuned
                     output, _, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
                                                                       labels.to(device).long(),
@@ -184,33 +170,33 @@ if __name__ == '__main__':
                                                                       spatialWeights.to(device).to(args.prec),
                                                                       distMap.to(device).to(args.prec),
                                                                       cond.to(device).to(args.prec),
-                                                                      imInfo[:, 2].to(device).to(torch.long), # Send archive one-hot
+                                                                      imInfo[:, 2].to(device).to(torch.long), # Send DS #
                                                                       alpha)
                     loss.backward()
                     opt_disent.step()
                     #val = [param.grad.abs().mean().item() for name, param in model.named_parameters() if 'dsIdentify_lin' in name]
                     #val = np.mean(val)
-                    diff = val - loss.detach().item()
-                    val = loss.detach().item()
-                    count+=1
+                    diff = val - loss.detach().item() # Loss derivative
+                    val = loss.detach().item() # Update previous loss value
                     model.toggle = True if diff < EPS else False
+                
+                # Switch the parameters which requires gradients
                 for name, param in model.named_parameters():
                     param.requires_grad = False if 'dsIdentify_lin' in name else True
             
-            model.toggle = True
+            model.toggle = True # This must always be true to optimize primary + conf loss
             output, _, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
                                                           labels.to(device).long(),
                                                           pupil_center.to(device).to(args.prec),
                                                           spatialWeights.to(device).to(args.prec),
                                                           distMap.to(device).to(args.prec),
                                                           cond.to(device).to(args.prec),
-                                                          imInfo[:, 2].to(device).to(torch.long), # Send archive one-hot
+                                                          imInfo[:, 2].to(device).to(torch.long), # Send DS #
                                                           alpha)
 
             loss = loss.mean() if args.useMultiGPU else loss
             loss.backward()
             optimizer.step()
-            #torch.cuda.empty_cache() # Clear cache for unused nodes
 
             accLoss += loss.detach().cpu().item()
             predict = get_predictions(output)
@@ -286,7 +272,7 @@ if __name__ == '__main__':
         if epoch%embed_log == 0:
             print('Saving embeddings ...')
             writer.add_embedding(torch.cat(latent_codes, 0),
-                                 metadata=validObj.imList[:, 1],
+                                 metadata=validObj.imList[:len(latent_codes), 2],
                                  global_step=epoch)
 
         for name, param in model.named_parameters():
@@ -307,8 +293,8 @@ if __name__ == '__main__':
             print("Early stopping")
             break
 
-        ##save the model every epoch
-        if epoch %5 == 0:
+        ##save the model every 2 epochs
+        if epoch%2 == 0:
             torch.save(netDict if not args.useMultiGPU else model.module.state_dict(),
                        os.path.join(path2model, args.model+'_{}.pkl'.format(epoch)))
     writer.close()
