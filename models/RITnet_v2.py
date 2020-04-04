@@ -241,7 +241,7 @@ class DenseNet2D(nn.Module):
                 loss = 10*l_seg+l_pt+l_seg2pt+F.l1_loss(pred_c_seg, pred_c)
             else:
                 loss = 10*l_seg+l_pt+l_seg2pt
-        return op, latent, pred_c, pred_c_seg, loss
+        return op, latent, pred_c, pred_c_seg, loss.unsqueeze(0)
 
     def _initialize_weights(self):
         for m in self.modules():
