@@ -179,7 +179,7 @@ class DenseNet2D(nn.Module):
         self.toggle = True
         self.selfCorr = selfCorr
         self.disentangle = disentangle
-        self.disentangle_alpha = 0.1
+        self.disentangle_alpha = 10
 
         self.enc = DenseNet_encoder(in_c=1, chz=chz, actfunc=actfunc, growth=growth, norm=norm)
         self.dec = DenseNet_decoder(chz=chz, out_c=3, actfunc=actfunc, growth=growth, norm=norm)

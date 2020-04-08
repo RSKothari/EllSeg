@@ -1,3 +1,4 @@
+*ffs_gui
 *.pyc
 *.npy
 *.log
@@ -10,3 +11,4 @@
 *.mp3
 *__pycache__/*
 *.vscode
+/logs/

@@ -196,7 +196,7 @@ def generateImageGrid(I, mask, pupil_center, cond, override=False):
         with segmentation mask, pupil center and pupil ellipse.
     '''
     I_o = []
-    for i in range(0, cond.shape[0]):
+    for i in range(0, min(16, cond.shape[0])):
         im = I[i, ...].squeeze()
         im = np.stack([im for i in range(0, 3)], axis=2)
 

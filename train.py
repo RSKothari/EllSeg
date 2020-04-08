@@ -21,7 +21,7 @@ sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 #%%
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE" # Deactive file locking
-embed_log = 2
+embed_log = 5
 EPS=1e-7
 
 if __name__ == '__main__':
@@ -73,20 +73,12 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam([{'params':param_list,
                                    'lr':args.lr}]) # Set optimizer
 
-    # Let the network you need a disentanglement module.
-    # Please refer to args.py for more information on disentanglement strategy
-    if args.disentangle:
-        # Let the model know how many datasets it must expect
-        print('Total # of datasets found: {}'.format(np.unique(trainObj.imList[:, 2]).size))
-        model.setDatasetInfo(np.unique(trainObj.imList[:, 2]).size)
-        opt_disent = torch.optim.Adam(model.dsIdentify_lin.parameters(), lr=0.1*args.lr)
-        model._initialize_weights() # Re-init weights with new branch
-
+    # If loading pretrained weights, ensure you don't load confusion branch
     if args.resume:
         print ("NOTE resuming training. Priority: 1) Checkpoint 2) Epoch #")
         model  = model.to(device)
-        checkpointfile = os.path.join(checkpointfile, 'checkpoint.pt')
-        netDict = load_from_file([path2checkpoint, args.loadfile])
+        checkpointfile = os.path.join(path2checkpoint, 'checkpoint.pt')
+        netDict = load_from_file([checkpointfile, args.loadfile])
         model.load_state_dict(netDict['state_dict'])
         startEp = netDict['epoch'] if 'epoch' in netDict.keys() else 0
     else:
@@ -94,6 +86,14 @@ if __name__ == '__main__':
         # This is particularly useful for lottery tickets
         startEp = 0
         torch.save(model.state_dict(), os.path.join(path2model, args.model+'{}.pkl'.format('_init')))
+
+    # Let the network know you need a disentanglement module.
+    # Please refer to args.py for more information on disentanglement strategy
+    if args.disentangle:
+        # Let the model know how many datasets it must expect
+        print('Total # of datasets found: {}'.format(np.unique(trainObj.imList[:, 2]).size))
+        model.setDatasetInfo(np.unique(trainObj.imList[:, 2]).size)
+        opt_disent = torch.optim.Adam(model.dsIdentify_lin.parameters(), lr=0.1*args.lr)
 
     nparams = get_nparams(model)
     print('Total number of trainable parameters: {}\n'.format(nparams))
@@ -281,11 +281,13 @@ if __name__ == '__main__':
 
         # Generate a model dictionary which stores epochs and current state
         netDict = {'state_dict':[], 'epoch': epoch}
-        netDict['state_dict'] = model.state_dict() if not args.useMultiGPU else model.module.state_dict()
+        stateDict = model.state_dict() if not args.useMultiGPU else model.module.state_dict()
+        netDict['state_dict'] = {k: v for k, v in stateDict.items() if 'dsIdentify_lin' not in k}
 
         scoreTracker = np.mean(ious) + 2 - 2.5e-3*(np.nanmean(dists) + np.nanmean(dists_seg)) # Max value 3
         scheduler.step(scoreTracker)
         early_stopping(scoreTracker, netDict)
+
         if early_stopping.early_stop:
             torch.save(netDict, os.path.join(path2model, args.model + 'earlystop_{}.pkl'.format(epoch)))
             print("Early stopping")
@@ -293,6 +295,6 @@ if __name__ == '__main__':
 
         ##save the model every 2 epochs
         if epoch%2 == 0:
-            torch.save(netDict if not args.useMultiGPU else model.module.state_dict(),
+            torch.save(netDict,
                        os.path.join(path2model, args.model+'_{}.pkl'.format(epoch)))
     writer.close()

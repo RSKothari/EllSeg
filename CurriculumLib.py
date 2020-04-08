@@ -23,6 +23,7 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 from helperfunctions import simple_string, one_hot2dist, extract_datasets
 from helperfunctions import my_ellipse, pad2Size
 
+os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE" # Deactive file locking
 class MaskToTensor(object):
     def __call__(self, img):
         return torch.from_numpy(np.array(img, dtype=np.int32)).long()
