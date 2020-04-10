@@ -260,7 +260,8 @@ def lossandaccuracy(args, loader, model, alpha, device):
     latent_codes = []
     with torch.no_grad():
         for bt, batchdata in enumerate(tqdm.tqdm(loader)):
-            img, labels, spatialWeights, distMap, pupil_center, cond, imInfo = batchdata
+            img, labels, spatialWeights, distMap, elPhi, elPts, cond, imInfo = batchdata
+            pupil_center = elPts[:, 1, ...]
             output, latent, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
                                                               labels.to(device).long(),
                                                               pupil_center.to(device).to(args.prec),

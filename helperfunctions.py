@@ -476,6 +476,32 @@ def extract_datasets(subsets):
     ds_present, ds_id = np.unique(ds_idx, return_inverse=True)
     return ds_present, ds_id
 
+def get_ellipse_info(param, H, cond):
+    '''
+    Parameters
+    ----------
+    param : np.array
+        Given ellipse parameters, return the following:
+            a) Normalized Phi values
+            b) Points along periphery
+            c) Condition to indicate if ellipse exists
+    H: np.array 3x3
+        Normalizing matrix which converts ellipse to normalized coordinates
+    Returns
+    -------
+    normPhi: Normalized Phi values
+    elPts: Points along ellipse periphery
+    '''
+    if cond:
+        norm_param = my_ellipse(param).transform(H)[0][:-1] # We don't want the area
+        elPts = my_ellipse(param).generatePoints(50, 'equiAngle') # Regular points
+        elPhi = my_ellipse(norm_param).recover_Phi() # Normalized Phi value
+    else:
+        # Ellipse does not exist
+        elPts = -np.ones((8, 2))
+        elPhi = -np.ones((5, ))
+    return elPts, elPhi
+
 # Data extraction helpers
 
 def generateEmptyStorage(name, subset):

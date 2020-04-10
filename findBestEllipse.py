@@ -143,8 +143,7 @@ if __name__ == '__main__':
         alpha = linVal(epoch, (0, args.epochs), (0, 1), 0)
 
         for bt, batchdata in enumerate(trainloader):
-            img, labels, spatialWeights, distMap, elPhi, elPts, cond, imInfo = batchdata
-            pupil_center = elPts[:, 1, ... ]
+            img, labels, spatialWeights, distMap, pupil_center, cond, imInfo = batchdata
             model.toggle = False
             optimizer.zero_grad()
 

@@ -21,7 +21,7 @@ from torch.utils.data import Dataset
 
 from sklearn.model_selection import StratifiedKFold, train_test_split
 from helperfunctions import simple_string, one_hot2dist, extract_datasets
-from helperfunctions import my_ellipse, pad2Size
+from helperfunctions import my_ellipse, pad2Size, get_ellipse_info
 
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE" # Deactive file locking
 class MaskToTensor(object):
@@ -88,6 +88,7 @@ class DataLoader_riteyes(Dataset):
             pos 0: indicates pupil center exists
             pos 1: indicates mask exists
             pos 2: indicates pupil ellipse exists
+            pos 3: indicates iris ellipse exists
             ##modified:
         '''
         numClasses = 3
@@ -130,10 +131,17 @@ class DataLoader_riteyes(Dataset):
         spatialWeights = torch.from_numpy(spatialWeights)
         distMap = torch.from_numpy(distMap)
         cond = torch.from_numpy(cond)
-        pupil_center = torch.from_numpy(pupil_center).to(torch.float)
+        pupil_center = torch.from_numpy(pupil_center).to(torch.float32)
+
+        # Generate pupil and iris information
+        H = np.array([[2/img.shape[1], 0, -1], [0, 2/img.shape[0], -1], [0, 0, 1]])
+        pupil_phi, pupil_pts = get_ellipse_info(elParam[0], H, cond[2])
+        iris_phi, iris_pts = get_ellipse_info(elParam[1], H, cond[3])
+        elPhi = np.stack([iris_phi, pupil_phi], axis=0) # Respect iris first policy
+        elPts = np.stack([iris_pts, pupil_pts], axis=0) # Respect iris first policy
         imInfo = torch.from_numpy(imInfo)
 
-        return (img, label, spatialWeights, distMap, pupil_center, cond, imInfo)
+        return (img, label, spatialWeights, distMap, elPhi, elPts, cond, imInfo)
 
     def readImage(self, idx):
         '''
@@ -158,7 +166,7 @@ class DataLoader_riteyes(Dataset):
         cond4 = np.all(iris_param == -1)
         cond = np.array([cond1, cond2, cond3, cond4])
 
-        return I, mask_noSkin, (pupil_param, iris_param), pupil_center, cond, self.imList[idx, :]
+        return I, mask_noSkin, [pupil_param, iris_param], pupil_center, cond, self.imList[idx, :]
 
 def listDatasets(AllDS):
     dataset_list = np.unique(AllDS['dataset'])
