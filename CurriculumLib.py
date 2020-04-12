@@ -122,6 +122,7 @@ class DataLoader_riteyes(Dataset):
         # Calculate distMaps for only Iris and Pupil. Pupil: 2. Iris: 1. Rest: 0.
         distMap = np.zeros((3, *img.shape))
 
+        # Find distance map for each class
         for i in range(0, numClasses):
             distMap[i, ...] = one_hot2dist(label.astype(np.uint8)==i)
 
@@ -135,17 +136,21 @@ class DataLoader_riteyes(Dataset):
 
         # Generate pupil and iris information
         H = np.array([[2/img.shape[1], 0, -1], [0, 2/img.shape[0], -1], [0, 0, 1]])
-        pupil_phi, pupil_pts = get_ellipse_info(elParam[0], H, cond[2])
-        iris_phi, iris_pts = get_ellipse_info(elParam[1], H, cond[3])
+        iris_phi, iris_pts, iris_norm = get_ellipse_info(elParam[0], H, cond[3])
+        pupil_phi, pupil_pts, pupil_norm = get_ellipse_info(elParam[1], H, cond[2])
+
         elPhi = np.stack([iris_phi, pupil_phi], axis=0) # Respect iris first policy
         elPts = np.stack([iris_pts, pupil_pts], axis=0) # Respect iris first policy
+        elNorm = np.stack([iris_norm, pupil_norm], axis=0) # Respect iris first policy
         imInfo = torch.from_numpy(imInfo)
 
-        return (img, label, spatialWeights, distMap, elPhi, elPts, cond, imInfo)
+
+        return (img, label, spatialWeights, distMap, pupil_center, elPhi, elPts, elNorm, cond, imInfo)
 
     def readImage(self, idx):
         '''
         Read an individual image and all its properties using partial loading
+        Note: Iris first policy for all data
         '''
         im_num = self.imList[idx, 0]
         archNum = self.imList[idx, 1]
@@ -166,7 +171,7 @@ class DataLoader_riteyes(Dataset):
         cond4 = np.all(iris_param == -1)
         cond = np.array([cond1, cond2, cond3, cond4])
 
-        return I, mask_noSkin, [pupil_param, iris_param], pupil_center, cond, self.imList[idx, :]
+        return I, mask_noSkin, [iris_param, pupil_param], pupil_center, cond, self.imList[idx, :]
 
 def listDatasets(AllDS):
     dataset_list = np.unique(AllDS['dataset'])

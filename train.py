@@ -16,6 +16,7 @@ from helperfunctions import mypause, linVal
 from pytorchtools import EarlyStopping, load_from_file
 from utils import get_nparams, Logger, get_predictions, lossandaccuracy
 from utils import getSeg_metrics, getPoint_metric, generateImageGrid, unnormPts
+from utils import points_to_heatmap
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
@@ -143,8 +144,9 @@ if __name__ == '__main__':
         alpha = linVal(epoch, (0, args.epochs), (0, 1), 0)
 
         for bt, batchdata in enumerate(trainloader):
-            img, labels, spatialWeights, distMap, elPhi, elPts, cond, imInfo = batchdata
-            pupil_center = elPts[:, 1, ... ]
+            img, labels, spatialWeights, distMap, hMaps, pupil_center, elPhi, elPts, elNorm, cond, imInfo = batchdata
+            hMaps = points_to_heatmap(elPts, 2, img.shape[1:])
+
             model.toggle = False
             optimizer.zero_grad()
 
@@ -165,6 +167,10 @@ if __name__ == '__main__':
                     output, _, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
                                                                       labels.to(device).long(),
                                                                       pupil_center.to(device).to(args.prec),
+                                                                      hMaps.to(device).to(args.prec),
+                                                                      elPts.to(device).to(args.prec),
+                                                                      elNorm.to(device).to(args.prec),
+                                                                      elPhi.to(device).to(args.prec),
                                                                       spatialWeights.to(device).to(args.prec),
                                                                       distMap.to(device).to(args.prec),
                                                                       cond.to(device).to(args.prec),
@@ -184,14 +190,17 @@ if __name__ == '__main__':
                     param.requires_grad = False if 'dsIdentify_lin' in name else True
 
             model.toggle = True # This must always be true to optimize primary + conf loss
-            output, _, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
-                                                          labels.to(device).long(),
-                                                          pupil_center.to(device).to(args.prec),
-                                                          spatialWeights.to(device).to(args.prec),
-                                                          distMap.to(device).to(args.prec),
-                                                          cond.to(device).to(args.prec),
-                                                          imInfo[:, 2].to(device).to(torch.long), # Send DS #
-                                                          alpha)
+            output, op_hmaps, elOut, _, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
+                                                                      labels.to(device).long(),
+                                                                      hMaps.to(device).to(args.prec),
+                                                                      elPts.to(device).to(args.prec),
+                                                                      elNorm.to(device).to(args.prec),
+                                                                      elPhi.to(device).to(args.prec),
+                                                                      spatialWeights.to(device).to(args.prec),
+                                                                      distMap.to(device).to(args.prec),
+                                                                      cond.to(device).to(args.prec),
+                                                                      imInfo[:, 2].to(device).to(torch.long), # Send DS #
+                                                                      alpha)
 
             loss = loss.mean() if args.useMultiGPU else loss
             loss.backward()

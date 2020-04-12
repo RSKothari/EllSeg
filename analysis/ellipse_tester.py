@@ -29,15 +29,22 @@ def sketch(ptNum, data):
 
 n_pts = 5
 I_res = (240, 240)
-angleItr = np.linspace(-170, 170, n_pts)
-eccItr = np.linspace(0.2, 1.8, n_pts)
+H = np.array([[2/240, 0, -1], [0, 2/240, -1], [0, 0, 1]])
+angleItr = np.linspace(10, 170, n_pts)
+eccItr = np.linspace(0.4, 1.6, n_pts) + 1e-5 # Never a perfect 1
 
 data = {'I':[], 'xPts':[], 'yPts':[]}
 
 for ang in np.nditer(angleItr):
     for ecc in np.nditer(eccItr):
         # Input as param
-        param = np.array([120, 120, 40, 40*ecc, np.deg2rad(ang)])
+        param = np.array([130, 110, 40, 40*ecc, np.deg2rad(ang)])
+        #print('Phi: {}'.format(np.round(my_ellipse(param).recover_Phi(), 2)))
+        param_norm = my_ellipse(param).transform(H)[0][:5]
+        print('Theta: {}. E: {}'.format(ang, ecc))
+        print('Param: {}'.format(np.round(param, 2)))
+        print('Param norm: {}'.format(np.round(param_norm, 2)))
+        print('Phi: {}'.format(np.round(my_ellipse(param_norm).recover_Phi(), 2)))
         x_pts, y_pts = getPts(param)
         I = np.zeros(I_res)
         rr, cc = ellipse(param[1], param[0], param[3], param[2], shape=I_res, rotation=param[4])

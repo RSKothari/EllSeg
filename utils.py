@@ -157,21 +157,6 @@ def getPoint_metric(y_true, y_pred, cond, sz, do_unnorm):
     return (np.sum(dist)/np.sum(flag) if np.any(flag) else np.nan,
             dist)
 
-def conf_Loss(x, gt, flag):
-    '''
-    x: Input predicted one-hot encoding for dataset identity
-    gt: One-hot encoding of target classes
-    flag: Either 1 or 0. Please refer to paper "Turning a Blind Eye: Explicit
-    Removal of Biases and Variation from Deep Neural Network Embeddings"
-    '''
-    if flag:
-        # If true, return the confusion loss
-        loss = torch.mean(torch.mean(-F.log_softmax(x, dim=1), dim=1))
-    else:
-        # Else, return the secondary loss
-        loss = F.cross_entropy(x, gt)
-    return loss
-
 def generateImageGrid(I, mask, pupil_center, cond, override=False):
     '''
     Parameters
@@ -295,3 +280,125 @@ def lossandaccuracy(args, loader, model, alpha, device):
             ious.append(iou)
     ious = np.stack(ious, axis=0)
     return np.mean(epoch_loss), np.nanmean(ious, 0), dists, dists_seg, latent_codes
+
+def points_to_heatmap(pts, std, res):
+    # Given image resolution and variance, generate synthetic Gaussians around
+    # points of interest for heat map regression.
+    # pts: [B, C, N, 2]
+    # H: [B, C, N, H, W]
+    B, C, N, _ = pts.shape
+    grid = create_meshgrid(res[0], res[1], normalized_coordinates=False)
+    grid = grid.squeeze()
+    X = grid[..., 0]
+    Y = grid[..., 1]
+
+    X = torch.stack(B*C*N*[X], axis=0).reshape(B, C, N, res[0], res[1])
+    X = X - torch.stack(np.prod(res)*[pts[..., 0]], axis=3).reshape(B, C, N, res[0], res[1])
+
+    Y = torch.stack(B*C*N*[Y], axis=0).reshape(B, C, N, res[0], res[1])
+    Y = Y - torch.stack(np.prod(res)*[pts[..., 1]], axis=3).reshape(B, C, N, res[0], res[1])
+
+    H = torch.exp(-(X**2 + Y**2)/(2*std**2))
+    H = H/(2*np.pi*std**2) # This makes the summation == 1 per image in a batch
+    return H
+
+def ElliFit(self, coords, mns, cond):
+    '''
+    Parameters
+    ----------
+    coords : torch float32 [B, N, 2]
+        Predicted points on ellipse periphery
+    mns : torch float32 [B, 2]
+        Predicted mean of the center points
+
+    Returns
+    -------
+    PhiOp: The Phi scores associated with ellipse fitting. For more info,
+    please refer to ElliFit paper.
+    '''
+    B = coords.shape[0]
+
+    PhiList = []
+
+    for bt in range(B):
+        coords_norm = coords[bt, ...] - mns[bt, ...] # coords_norm: [N, 2]
+        N = coords_norm.shape[0]
+
+        x = coords_norm[:, 0]
+        y = coords_norm[:, 1]
+
+        X = torch.stack([-x**2, -x*y, x, y, -torch.ones(N, ).cuda()], dim=1)
+        Y = y**2
+
+        a = torch.inverse(X.T.matmul(X))
+        b = X.T.matmul(Y)
+        Phi = a.matmul(b)
+        PhiList.append(Phi)
+    Phi = torch.stack(PhiList, dim=0)
+    return Phi
+
+def spatial_softmax_2d(input: torch.Tensor, temperature: torch.Tensor = torch.tensor(1.0)) -> torch.Tensor:
+    r"""Applies the Softmax function over features in each image channel.
+    Note that this function behaves differently to `torch.nn.Softmax2d`, which
+    instead applies Softmax over features at each spatial location.
+    Returns a 2D probability distribution per image channel.
+    Arguments:
+        input (torch.Tensor): the input tensor.
+        temperature (torch.Tensor): factor to apply to input, adjusting the
+          "smoothness" of the output distribution. Default is 1.
+    Shape:
+        - Input: :math:`(B, N, H, W)`
+        - Output: :math:`(B, N, H, W)`
+    """
+
+    batch_size, channels, height, width = input.shape
+    x: torch.Tensor = input.view(batch_size, channels, -1)
+
+    x_soft: torch.Tensor = F.softmax(x * temperature, dim=-1)
+
+    return x_soft.view(batch_size, channels, height, width)
+
+def spatial_softargmax_2d(input: torch.Tensor, normalized_coordinates: bool = True) -> torch.Tensor:
+    r"""Computes the 2D soft-argmax of a given input heatmap.
+    The input heatmap is assumed to represent a valid spatial probability
+    distribution, which can be achieved using
+    :class:`~kornia.contrib.dsnt.spatial_softmax_2d`.
+    Returns the index of the maximum 2D coordinates of the given heatmap.
+    The output order of the coordinates is (x, y).
+    Arguments:
+        input (torch.Tensor): the input tensor.
+        normalized_coordinates (bool): whether to return the
+          coordinates normalized in the range of [-1, 1]. Otherwise,
+          it will return the coordinates in the range of the input shape.
+          Default is True.
+    Shape:
+        - Input: :math:`(B, N, H, W)`
+        - Output: :math:`(B, N, 2)`
+    Examples:
+        >>> heatmaps = torch.tensor([[[
+            [0., 0., 0.],
+            [0., 0., 0.],
+            [0., 1., 0.]]]])
+        >>> coords = spatial_softargmax_2d(heatmaps, False)
+        tensor([[[1.0000, 2.0000]]])
+    """
+
+    batch_size, channels, height, width = input.shape
+
+    # Create coordinates grid.
+    grid: torch.Tensor = create_meshgrid(
+        height, width, normalized_coordinates)
+    grid = grid.to(device=input.device, dtype=input.dtype)
+
+    pos_x: torch.Tensor = grid[..., 0].reshape(-1)
+    pos_y: torch.Tensor = grid[..., 1].reshape(-1)
+
+    input_flat: torch.Tensor = input.view(batch_size, channels, -1)
+
+    # Compute the expectation of the coordinates.
+    expected_y: torch.Tensor = torch.sum(pos_y * input_flat, -1, keepdim=True)
+    expected_x: torch.Tensor = torch.sum(pos_x * input_flat, -1, keepdim=True)
+
+    output: torch.Tensor = torch.cat([expected_x, expected_y], -1)
+
+    return output.view(batch_size, channels, 2)  # BxNx2

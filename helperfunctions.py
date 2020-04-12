@@ -490,6 +490,7 @@ def get_ellipse_info(param, H, cond):
     Returns
     -------
     normPhi: Normalized Phi values
+    normParam: Normalized Ellipse parameters
     elPts: Points along ellipse periphery
     '''
     if not cond:
@@ -498,9 +499,10 @@ def get_ellipse_info(param, H, cond):
         elPhi = my_ellipse(norm_param).recover_Phi() # Normalized Phi value
     else:
         # Ellipse does not exist
+        norm_param = -np.ones((5, ))
         elPts = -np.ones((8, 2))
         elPhi = -np.ones((5, ))
-    return elPhi, elPts
+    return elPhi, elPts, norm_param
 
 # Data extraction helpers
 

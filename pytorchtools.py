@@ -64,7 +64,7 @@ class EarlyStopping:
             print('Validation metric increased ({:.6f} --> {:.6f}).  Saving model ...'.format(self.val_loss_min, val_loss))
         torch.save(model_dict, os.path.join(self.path2save, self.fName))
         self.val_loss_min = val_loss
-#
+
 # Useful PyTorch functions
 def weights_init(ObjVar):
     # Function to initialize weights
@@ -80,25 +80,25 @@ def weights_init(ObjVar):
         else:
             print('{}. No init.'.format(name))
     return ObjVar
-#
-#def partial_weight_loading(net, net_odict):
-#    # Load all weights which have a matching string.
-#    # WARNING: This code can break in multiple ways.
-#    # Use with caution. If you the data loading does
-#    # not look right, retrain from scratch.
-#    available_keys = [key for key in net_odict.keys()]
-#    for name, param in net.named_parameters():
-#        matchedkey = [key for key in available_keys if name in key]
-#        if len(matchedkey) == 1:
-#            if net_odict[matchedkey[0]].data.shape == param.data.shape:
-#                param.data = net_odict[matchedkey[0]].cpu().data
-#            else:
-#                print('Shapes did not match. Ignoring weight: {}.'.format(name))
-#        else:
-#            print('Could not match: {}. Ignoring this parameter.'.format(name))
-#    print('Values loaded!')
-#    return net
-#
+
+def partial_weight_loading(net, net_odict):
+    # Load all weights which have a matching string.
+    # WARNING: This code can break in multiple ways.
+    # Use with caution. If you the data loading does
+    # not look right, retrain from scratch.
+    available_keys = [key for key in net_odict.keys()]
+    for name, param in net.named_parameters():
+        matchedkey = [key for key in available_keys if name in key]
+        if len(matchedkey) == 1:
+            if net_odict[matchedkey[0]].data.shape == param.data.shape:
+                param.data = net_odict[matchedkey[0]].cpu().data
+            else:
+                print('Shapes did not match. Ignoring weight: {}.'.format(name))
+        else:
+            print('Could not match: {}. Ignoring this parameter.'.format(name))
+    print('Values loaded!')
+    return net
+
 def move_to_multi(model_dict):
     '''
     Convert dictionary of weights and keys
