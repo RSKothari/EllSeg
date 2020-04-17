@@ -144,13 +144,14 @@ if __name__ == '__main__':
         alpha = linVal(epoch, (0, args.epochs), (0, 1), 0)
 
         for bt, batchdata in enumerate(trainloader):
-            img, labels, spatialWeights, distMap, hMaps, pupil_center, elPhi, elPts, elNorm, cond, imInfo = batchdata
+            img, labels, spatialWeights, distMap, pupil_center, elPhi, elPts, elNorm, cond, imInfo = batchdata
             hMaps = points_to_heatmap(elPts, 2, img.shape[1:])
 
             model.toggle = False
             optimizer.zero_grad()
 
             # Disentanglement procedure. Toggle should always be False upon entry.
+            '''
             if args.disentangle:
                 opt_disent.zero_grad()
                 for name, param in model.named_parameters():
@@ -188,6 +189,7 @@ if __name__ == '__main__':
                 # Switch the parameters which requires gradients
                 for name, param in model.named_parameters():
                     param.requires_grad = False if 'dsIdentify_lin' in name else True
+                '''
 
             model.toggle = True # This must always be true to optimize primary + conf loss
             output, op_hmaps, elOut, _, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
