@@ -145,7 +145,7 @@ if __name__ == '__main__':
 
         for bt, batchdata in enumerate(trainloader):
             img, labels, spatialWeights, distMap, pupil_center, elPhi, elPts, elNorm, cond, imInfo = batchdata
-            hMaps = points_to_heatmap(elPts, 2, img.shape[1:])
+            hMaps = points_to_heatmap(elPts, 2, img.shape[2:])
 
             model.toggle = False
             optimizer.zero_grad()

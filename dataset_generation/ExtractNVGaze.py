@@ -30,8 +30,8 @@ args = parser.parse_args()
 
 #sys.path.append(os.getcwd())
 sys.path.append(os.path.join(os.path.abspath('..')))
-from RITEyes_helper.helperfunctions import ransac, ElliFit, my_ellipse
-from RITEyes_helper.helperfunctions import generateEmptyStorage
+from helperfunctions import ransac, ElliFit, my_ellipse
+from helperfunctions import generateEmptyStorage
 
 if args.noDisp:
     noDisp = True
