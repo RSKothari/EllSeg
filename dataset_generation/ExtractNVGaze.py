@@ -224,7 +224,7 @@ for fName in list_ds:
         keydict['archive'].append(ds_name)
 
         temp = 255*(mask_noSkin == 3)
-        edge = cv2.Canny(temp.astype(np.uint8), 10, 150)
+        edge = cv2.Canny(temp.astype(np.uint8), 10, 150) + cv2.Canny((255-temp).astype(np.uint8), 10, 150)
         r, c = np.where(edge)
         temp_pts = np.stack([c, r], axis=1) # Improve readability
         model_pupil = ransac(temp_pts, ElliFit, 15, 10, 0.05, np.round(temp_pts.shape[0]/2)).loop()
@@ -233,7 +233,7 @@ for fName in list_ds:
         pupil_loc = model_pupil.model[:2]
         
         temp = 255*((mask_noSkin == 2) | (mask_noSkin == 3))
-        edge = cv2.Canny(temp.astype(np.uint8), 10, 150)
+        edge = cv2.Canny(temp.astype(np.uint8), 10, 150)+ cv2.Canny((255-temp).astype(np.uint8), 10, 150)
         r, c = np.where(edge)
         temp_pts = np.stack([c, r], axis=1)
         model_iris = ransac(temp_pts, ElliFit, 15, 10, 0.05, np.round(temp_pts.shape[0]/2)).loop()

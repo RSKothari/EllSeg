@@ -93,7 +93,7 @@ class my_ellipse():
 
     def recover_theta(self, mat):
         a, b, c, d, e, f = tuple(self.mat2quad(mat))
-        print('a: {}. b: {}. c: {}'.format(a, b, c))
+        #print('a: {}. b: {}. c: {}'.format(a, b, c))
         if abs(b)<=EPS and a<=c:
             theta = 0.0
         elif abs(b)<=EPS and a>c:
@@ -102,7 +102,7 @@ class my_ellipse():
             theta=0.5*np.arctan2(b, (a-c))
         elif abs(b)>EPS and a>c:
             #theta = 0.5*(np.pi + np.arctan(b/(a-c)))
-            theta = 0.5*np.arctan(b/(a-c))
+            theta = 0.5*np.arctan2(b, (a-c))
         else:
             print('Unknown condition')
         return theta
@@ -178,7 +178,7 @@ class my_ellipse():
             N = len(T)
             x = self.param[2]*np.cos(T)
             y = self.param[3]*np.sin(T)
-            H_rot = rotation_2d(-self.param[-1])
+            H_rot = rotation_2d(self.param[-1])
             X1 = H_rot.dot(np.stack([x, y, np.ones(N, )], axis=0))
 
             x_r = X1[0, :] + self.param[0]
@@ -245,6 +245,7 @@ class ElliFit():
             a = 2*np.sqrt(N/D1)
             b = 2*np.sqrt(N/D2)
             theta_c = 0.5*np.arctan2(-self.Phi[1], (1 - self.Phi[0]))
+            #theta_c = -0.5*np.arctan2(2*self.Phi[1], 1-self.Phi[0])
             xc = (self.Phi[1]*self.Phi[3] - 2*self.Phi[2])/(self.Phi[1]**2 - 4*self.Phi[0])
             yc = (self.Phi[1]*self.Phi[2] - 2*self.Phi[0]*self.Phi[3])/(self.Phi[1]**2 - 4*self.Phi[0])
             model = [xc + xm, yc + ym, np.sqrt(0.5*a**2), np.sqrt(0.5*b**2), theta_c]
@@ -458,7 +459,7 @@ def getValidPoints(LabelMat):
     pupil: label == 3, iris: label ==2
     '''
     im = np.uint8(255*LabelMat.astype(np.float32)/LabelMat.max())
-    edges = cv2.Canny(im, 50, 100)
+    edges = cv2.Canny(im, 50, 100) + cv2.Canny(255-im, 50, 100)
     r, c = np.where(edges)
     pupilPts = []
     irisPts = []

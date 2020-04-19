@@ -9,6 +9,7 @@ Created on Mon Mar  2 15:17:32 2020
 # This file contains definitions which are not applicable in regular scenarios.
 # For general purposes functions, classes and operations - please use helperfunctions.
 import os
+import cv2
 import tqdm
 import copy
 import torch
@@ -192,15 +193,16 @@ def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, override=False
     H = np.array([[W/2, 0, W/2], [0, H/2, H/2], [0, 0, 1]])
     I_o = []
     for i in range(0, min(16, cond.shape[0])):
-        im = I[i, ...].squeeze()
+        im = I[i, ...].squeeze() - I[i, ...].min()
+        im = cv2.equalizeHist(np.uint8(255*im/im.max()))
         im = np.stack([im for i in range(0, 3)], axis=2)
 
         if (not cond[i, 1]) or override:
             # If masks exists
             rr, cc = np.where(mask[i, ...] == 1)
-            im[rr, cc, ...] = np.array([-1, 1, -1]) # Green
+            im[rr, cc, ...] = np.array([0, 255, 0]) # Green
             rr, cc = np.where(mask[i, ...] == 2)
-            im[rr, cc, ...] = np.array([1, 1, -1]) # Yellow
+            im[rr, cc, ...] = np.array([255, 255, 0]) # Yellow
             
             el_iris = my_ellipse(elNorm[i, 0, ...]).transform(H)[0]
             el_pupil = my_ellipse(elNorm[i, 1, ...]).transform(H)[0]
@@ -219,8 +221,22 @@ def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, override=False
             cc_i = cc_i.clip(6, im.shape[1]-6)
             cc_p = cc_p.clip(6, im.shape[1]-6)
             
-            im[rr_i, cc_i, ...] = np.array([-1, -1, 1])
-            im[rr_p, cc_p, ...] = np.array([1, -1, -1])
+            im[rr_i, cc_i, ...] = np.array([0, 0, 255])
+            im[rr_p, cc_p, ...] = np.array([255, 0, 0])
+            
+            irisMaps = np.mean(hMaps[i, 0, ...], axis=0)
+            pupilMaps = np.mean(hMaps[i, 1, ...], axis=0)
+            irisMaps = np.uint8(255*irisMaps/irisMaps.max())
+            pupilMaps = np.uint8(255*pupilMaps/pupilMaps.max())
+            
+            im = cv2.addWeighted(im,
+                                0.5,
+                                np.stack([irisMaps, irisMaps, irisMaps], axis=2),
+                                0.5, 0)  # Add Iris to blue
+            im = cv2.addWeighted(im,
+                                0.5,
+                                np.stack([pupilMaps, pupilMaps, pupilMaps], axis=2),
+                                0.5, 0)
 
         if (not cond[i, 0]) or override:
             # If pupil center exists
@@ -231,7 +247,7 @@ def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, override=False
         I_o.append(im)
     I_o = np.stack(I_o, axis=0)
     I_o = np.moveaxis(I_o, 3, 1)
-    I_o = make_grid(torch.from_numpy(I_o), nrow=4)
+    I_o = make_grid(torch.from_numpy(I_o).to(torch.float), nrow=4)
     I_o = I_o - I_o.min()
     I_o = I_o/I_o.max()
     return I_o

@@ -206,7 +206,7 @@ for fName in list_ds:
         model_iris = ransac(irisPts, ElliFit, 15, 40, 5e-3, 15).loop()
         iris_fit_error = my_ellipse(model_iris.model).verify(irisPts)
 
-        if (pupil_fit_error > 0.1) | (iris_fit_error > 0.1):
+        if (pupil_fit_error > 0.05) | (iris_fit_error > 0.05):
             print('Skipping: {}'.format(imName))
             continue
 

@@ -29,9 +29,11 @@ def augment(base, mask, pupil_c, elParam, choice=None):
         
         aug_pupil_c[0] = base.shape[1] - aug_pupil_c[0] if not badPup_c else aug_pupil_c[0]
         aug_pupilParam[0] = base.shape[1] - elParam[0][0] if not badPup else aug_pupilParam[0]
-        aug_pupilParam[-1] = 0.5*np.pi + elParam[0][-1] if not badPup else aug_pupilParam[-1]
+        #aug_pupilParam[-1] = 0.5*np.pi + elParam[0][-1] if not badPup else aug_pupilParam[-1]
+        aug_pupilParam[-1] = -elParam[0][-1] if not badPup else aug_pupilParam[-1]
         aug_irisParam[0] = base.shape[1] - elParam[1][0] if not badIri else aug_irisParam[0]
-        aug_irisParam[-1] = 0.5*np.pi + elParam[1][-1] if not badIri else aug_irisParam[-1]
+        #aug_irisParam[-1] = 0.5*np.pi + elParam[1][-1] if not badIri else aug_irisParam[-1]
+        aug_irisParam[-1] = -elParam[1][-1] if not badIri else aug_irisParam[-1]
 
     elif index_value == 1:
         # Gaussian blur
@@ -96,6 +98,7 @@ def augment(base, mask, pupil_c, elParam, choice=None):
         '''
     elif index_value == 6:
         # Rotate image
+        
         ang = 30*2*(np.random.rand(1) - 0.5)
         center = (int(0.5*base.shape[1]), int(0.5*base.shape[0]))
         M = cv2.getRotationMatrix2D(center,
@@ -115,6 +118,7 @@ def augment(base, mask, pupil_c, elParam, choice=None):
         aug_pupilParam[-1] = aug_pupilParam[-1] - ang_rad if not badPup else aug_pupilParam[-1]
         aug_irisParam[:2] = np.matmul(R, aug_irisParam[:2] - np.array(center)) + np.array(center)
         aug_irisParam[-1] = aug_irisParam[-1] - ang_rad if not badIri else aug_irisParam[-1]
+        
     
     elif index_value >=7:
         # Absolute no change

@@ -102,6 +102,7 @@ class DataLoader_riteyes(Dataset):
         if self.scale:
             img, label, elParam, pupil_center = self.scaleFn(img, label, elParam, pupil_center)
 
+
         img, label, pupil_center, elParam = augment(img,
                                                     label,
                                                     pupil_center,

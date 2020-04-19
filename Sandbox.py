@@ -19,8 +19,7 @@ from RITEyes_helper.CurriculumLib import selDataset, selSubset, DataLoader_ritey
 
 
 if __name__=='__main__':
-    #path2data = '/media/rakshit/tank/Dataset'
-    path2data = 'Y:/media/rakshit/tank/Dataset'
+    path2data = '/media/rakshit/tank/Dataset'
     path2h5 = os.path.join(path2data, 'All')
     path2arc_keys = os.path.join(path2data, 'MasterKey')
     '''
@@ -59,7 +58,7 @@ if __name__=='__main__':
         hMaps = points_to_heatmap(elPts, 2, I.shape[2:])
         dispI = generateImageGrid(I.squeeze().numpy(),
                                   mask.numpy(),
-                                  hMaps,
+                                  hMaps.numpy(),
                                   elNorm.numpy(),
                                   pupil_center.numpy(),
                                   cond.numpy())
