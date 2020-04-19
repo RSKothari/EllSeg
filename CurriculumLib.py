@@ -135,7 +135,7 @@ class DataLoader_riteyes(Dataset):
         pupil_center = torch.from_numpy(pupil_center).to(torch.float32)
 
         # Generate pupil and iris information
-        H = np.array([[2/img.shape[1], 0, -1], [0, 2/img.shape[0], -1], [0, 0, 1]])
+        H = np.array([[2/img.shape[2], 0, -1], [0, 2/img.shape[1], -1], [0, 0, 1]])
         iris_phi, iris_pts, iris_norm = get_ellipse_info(elParam[0], H, cond[3])
         pupil_phi, pupil_pts, pupil_norm = get_ellipse_info(elParam[1], H, cond[2])
 

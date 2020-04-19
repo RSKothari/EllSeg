@@ -11,7 +11,7 @@ import time
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
-from utils import generateImageGrid
+from utils import generateImageGrid, points_to_heatmap
 from torch.utils.data import DataLoader
 from RITEyes_helper.helperfunctions import mypause
 from RITEyes_helper.CurriculumLib import readArchives, listDatasets, generate_fileList
@@ -42,7 +42,7 @@ if __name__=='__main__':
     trainObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'train', True, (480, 640), 0.5)
     validObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'valid', False, (480, 640), 0.5)
     '''
-    f = os.path.join('curObjects', 'cond_2.pkl')
+    f = os.path.join('curObjects', 'cond_0.pkl')
     trainObj, validObj, _ = pickle.load(open(f, 'rb'))
     trainObj.path2data = path2h5
 
@@ -51,19 +51,24 @@ if __name__=='__main__':
                              shuffle=True,
                              num_workers=0,
                              drop_last=True)
-
-    #fig, axs = plt.subplots(nrows=1, ncols=1)
+    fig, axs = plt.subplots(nrows=1, ncols=1)
     totTime = []
     startTime = time.time()
     for bt, data in enumerate(trainLoader):
-        I, mask, spatialWeights, distMap, hMaps, pupil_center, elPhi, elPts, elNorm, cond, imInfo = data
-        dispI = generateImageGrid(I.numpy(), mask.numpy(), pupil_center.numpy(), cond.numpy())
+        I, mask, spatialWeights, distMap, pupil_center, elPhi, elPts, elNorm, cond, imInfo = data
+        hMaps = points_to_heatmap(elPts, 2, I.shape[2:])
+        dispI = generateImageGrid(I.squeeze().numpy(),
+                                  mask.numpy(),
+                                  hMaps,
+                                  elNorm.numpy(),
+                                  pupil_center.numpy(),
+                                  cond.numpy())
+        
         dT = time.time() - startTime
         totTime.append(dT)
         print('Batch: {}. Time: {}'.format(bt, dT))
         startTime = time.time()
 
-        '''
         if bt == 0:
             h_ims = axs.imshow(0.5*dispI.permute(1, 2, 0)+0.5, cmap='gray')
             plt.show()
@@ -71,6 +76,4 @@ if __name__=='__main__':
         else:
             h_ims.set_data(0.5*dispI.permute(1, 2, 0)+0.5)
             mypause(0.01)
-        '''
-
     print('Time for 1 epoch: {}'.format(np.sum(totTime)))

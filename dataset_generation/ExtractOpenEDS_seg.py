@@ -8,6 +8,7 @@ Created on Fri Jun 21 15:21:36 2019
 # Confirmed code works perfectly. Do not display.
 import os
 import cv2
+import sys
 import json
 import argparse
 import matplotlib
@@ -16,8 +17,11 @@ import deepdish as dd
 import scipy.io as scio
 from matplotlib.patches import Ellipse
 from skimage.draw import ellipse as drawEllipse
-from RITEyes_helper.helperfunctions import ransac, ElliFit, my_ellipse
-from RITEyes_helper.helperfunctions import generateEmptyStorage, getValidPoints
+
+sys.path.append('..')
+
+from helperfunctions import ransac, ElliFit, my_ellipse
+from helperfunctions import generateEmptyStorage, getValidPoints
 
 def mypause(interval):
     backend = plt.rcParams['backend']

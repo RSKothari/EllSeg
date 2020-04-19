@@ -7,6 +7,7 @@ Created on Wed May 29 16:16:57 2019
 """
 import os
 import cv2
+import sys
 import glob
 import copy
 import argparse
@@ -15,17 +16,22 @@ import numpy as np
 import deepdish as dd
 import scipy.io as scio
 
+sys.path.append('..')
+
 from PIL import Image
 from sklearn.cluster import KMeans
 from matplotlib.patches import Ellipse
+
+from helperfunctions import generateEmptyStorage, getValidPoints
+from helperfunctions import ransac, ElliFit, my_ellipse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--noDisp', help='Specify flag to display labelled images', type=int, default=0)
 parser.add_argument('--path2ds', help='Path to dataset', type=str)
 args = parser.parse_args()
 
-from RITEyes_helper.helperfunctions import ransac, ElliFit, my_ellipse
-from RITEyes_helper.helperfunctions import generateEmptyStorage, getValidPoints
+#from RITEyes_helper.helperfunctions import ransac, ElliFit, my_ellipse
+#from RITEyes_helper.helperfunctions import generateEmptyStorage, getValidPoints
 
 if args.noDisp:
     noDisp = True
@@ -178,9 +184,9 @@ for fName in list_ds:
             maskIm = np.asarray(Image.open(path2mask).convert('RGB'))
             maskIm_woskin = np.asarray(Image.open(path2mask_woskin).convert('RGB'))
 
-            I = cv2.resize(I, (320, 240), interpolation=cv2.INTER_CUBIC)
-            maskIm = cv2.resize(maskIm, (320, 240), interpolation=cv2.INTER_NEAREST)
-            maskIm_woskin = cv2.resize(maskIm_woskin, (320, 240), interpolation=cv2.INTER_NEAREST)
+            I = cv2.resize(I, (640, 480), interpolation=cv2.INTER_CUBIC)
+            maskIm = cv2.resize(maskIm, (640, 480), interpolation=cv2.INTER_NEAREST)
+            maskIm_woskin = cv2.resize(maskIm_woskin, (640, 480), interpolation=cv2.INTER_NEAREST)
 
             maskIm, maskIm_woskin = quantizeMask(maskIm, maskIm_woskin)
         except:

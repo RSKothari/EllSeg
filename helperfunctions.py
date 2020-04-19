@@ -6,6 +6,8 @@ import cv2
 from itertools import chain
 from scipy.ndimage import distance_transform_edt as distance
 
+EPS = 1e-40
+
 # Helper classes
 class my_ellipse():
     def __init__(self, param):
@@ -91,8 +93,19 @@ class my_ellipse():
 
     def recover_theta(self, mat):
         a, b, c, d, e, f = tuple(self.mat2quad(mat))
-        theta = 0.5*np.arctan(b/(a-c))
-        return theta if a<c else (0.5*np.pi + theta)
+        print('a: {}. b: {}. c: {}'.format(a, b, c))
+        if abs(b)<=EPS and a<=c:
+            theta = 0.0
+        elif abs(b)<=EPS and a>c:
+            theta=np.pi/2
+        elif abs(b)>EPS and a<=c:
+            theta=0.5*np.arctan2(b, (a-c))
+        elif abs(b)>EPS and a>c:
+            #theta = 0.5*(np.pi + np.arctan(b/(a-c)))
+            theta = 0.5*np.arctan(b/(a-c))
+        else:
+            print('Unknown condition')
+        return theta
 
     def recover_C(self, mat):
         a, b, c, d, e, f = tuple(self.mat2quad(mat))
@@ -497,6 +510,7 @@ def get_ellipse_info(param, H, cond):
         norm_param = my_ellipse(param).transform(H)[0][:-1] # We don't want the area
         elPts = my_ellipse(param).generatePoints(50, 'equiAngle') # Regular points
         elPhi = my_ellipse(norm_param).recover_Phi() # Normalized Phi value
+        elPts = np.stack(elPts, axis=1)
     else:
         # Ellipse does not exist
         norm_param = -np.ones((5, ))

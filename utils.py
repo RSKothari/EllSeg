@@ -16,9 +16,10 @@ import numpy as np
 import torch.nn.functional as F
 
 from torchvision.utils import make_grid
-from skimage.draw import circle
+from skimage.draw import circle, ellipse_perimeter
 from typing import Optional
 from sklearn import metrics
+from helperfunctions import my_ellipse
 
 def create_meshgrid(
         height: int,
@@ -157,14 +158,19 @@ def getPoint_metric(y_true, y_pred, cond, sz, do_unnorm):
     return (np.sum(dist)/np.sum(flag) if np.any(flag) else np.nan,
             dist)
 
-def generateImageGrid(I, mask, pupil_center, cond, override=False):
+def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, override=False):
     '''
     Parameters
     ----------
     I : numpy array [B, H, W]
-        A batchfirst array which holds images.
+        A batchfirst array which holds images
     mask : numpy array [B, H, W]
         A batch first array which holds for individual pixels.
+    hMaps: numpy array [B, C, N, H, W]
+        N is the # of points, C is the category the points belong to (iris or 
+        pupil). Heatmaps are gaussians centered around point of interest
+    elNorm:numpy array [B, C, 5]
+        Normalized ellipse parameters 
     pupil_center : numpy array [B, 2]
         Identified pupil center for plotting.
     cond : numpy array [B, 5]
@@ -179,7 +185,11 @@ def generateImageGrid(I, mask, pupil_center, cond, override=False):
     I_o : numpy array [Ho, Wo]
         Returns an array holding concatenated images from the input overlayed
         with segmentation mask, pupil center and pupil ellipse.
+        
+    Note: If masks exist, then ellipse parameters would exist aswell.
     '''
+    B, H, W = I.shape
+    H = np.array([[W/2, 0, W/2], [0, H/2, H/2], [0, 0, 1]])
     I_o = []
     for i in range(0, min(16, cond.shape[0])):
         im = I[i, ...].squeeze()
@@ -188,9 +198,29 @@ def generateImageGrid(I, mask, pupil_center, cond, override=False):
         if (not cond[i, 1]) or override:
             # If masks exists
             rr, cc = np.where(mask[i, ...] == 1)
-            im[rr, cc, ...] = np.array([-1, 1, -1]) # Red
+            im[rr, cc, ...] = np.array([-1, 1, -1]) # Green
             rr, cc = np.where(mask[i, ...] == 2)
-            im[rr, cc, ...] = np.array([1, 1, -1])
+            im[rr, cc, ...] = np.array([1, 1, -1]) # Yellow
+            
+            el_iris = my_ellipse(elNorm[i, 0, ...]).transform(H)[0]
+            el_pupil = my_ellipse(elNorm[i, 1, ...]).transform(H)[0]
+            [rr_i, cc_i] = ellipse_perimeter(int(el_iris[1]),
+                                             int(el_iris[0]),
+                                             int(el_iris[3]),
+                                             int(el_iris[2]),
+                                             orientation=el_iris[4])
+            [rr_p, cc_p] = ellipse_perimeter(int(el_pupil[1]),
+                                             int(el_pupil[0]),
+                                             int(el_pupil[3]),
+                                             int(el_pupil[2]),
+                                             orientation=el_pupil[4])
+            rr_i = rr_i.clip(6, im.shape[0]-6)
+            rr_p = rr_p.clip(6, im.shape[0]-6)
+            cc_i = cc_i.clip(6, im.shape[1]-6)
+            cc_p = cc_p.clip(6, im.shape[1]-6)
+            
+            im[rr_i, cc_i, ...] = np.array([-1, -1, 1])
+            im[rr_p, cc_p, ...] = np.array([1, -1, -1])
 
         if (not cond[i, 0]) or override:
             # If pupil center exists
