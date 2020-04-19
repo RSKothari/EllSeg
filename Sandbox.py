@@ -16,10 +16,11 @@ from torch.utils.data import DataLoader
 from RITEyes_helper.helperfunctions import mypause
 from RITEyes_helper.CurriculumLib import readArchives, listDatasets, generate_fileList
 from RITEyes_helper.CurriculumLib import selDataset, selSubset, DataLoader_riteyes
-  
+
 
 if __name__=='__main__':
-    path2data = '/media/rakshit/tank/Dataset'
+    #path2data = '/media/rakshit/tank/Dataset'
+    path2data = 'Y:/media/rakshit/tank/Dataset'
     path2h5 = os.path.join(path2data, 'All')
     path2arc_keys = os.path.join(path2data, 'MasterKey')
     '''
@@ -29,12 +30,12 @@ if __name__=='__main__':
     print(datasets_present)
     print('Subsets present -----')
     print(subsets_present)
-    
+
     nv_subs1 = ['nvgaze_female_{:02}_public_50K_{}'.format(i+1, j+1) for i in range(0, 5) for j in range(0, 3)]
     nv_subs2 = ['nvgaze_male_{:02}_public_50K_{}'.format(i+1, j+1) for i in range(0, 5) for j in range(0, 3)]
     lpw_subs = ['LPW_{}'.format(i+1) for i in range(0, 12)]
     subsets = nv_subs1 + nv_subs2 + lpw_subs + ['none', 'train']
-    
+
     AllDS = selDataset(AllDS, ['OpenEDS', 'UnityEyes', 'NVGaze', 'LPW', 'riteyes_general'])
     AllDS = selSubset(AllDS, subsets)
     dataDiv_obj = generate_fileList(AllDS, mode='vanilla', notest=True)
@@ -43,24 +44,25 @@ if __name__=='__main__':
     '''
     f = os.path.join('curObjects', 'cond_2.pkl')
     trainObj, validObj, _ = pickle.load(open(f, 'rb'))
-    
+    trainObj.path2data = path2h5
+
     trainLoader = DataLoader(trainObj,
                              batch_size=16,
                              shuffle=True,
-                             num_workers=8,
+                             num_workers=0,
                              drop_last=True)
-    
+
     #fig, axs = plt.subplots(nrows=1, ncols=1)
     totTime = []
     startTime = time.time()
     for bt, data in enumerate(trainLoader):
-        I, mask, spatWt, maxDist, pupil_center, cond = data
+        I, mask, spatialWeights, distMap, hMaps, pupil_center, elPhi, elPts, elNorm, cond, imInfo = data
         dispI = generateImageGrid(I.numpy(), mask.numpy(), pupil_center.numpy(), cond.numpy())
         dT = time.time() - startTime
         totTime.append(dT)
         print('Batch: {}. Time: {}'.format(bt, dT))
         startTime = time.time()
-        
+
         '''
         if bt == 0:
             h_ims = axs.imshow(0.5*dispI.permute(1, 2, 0)+0.5, cmap='gray')
@@ -69,6 +71,6 @@ if __name__=='__main__':
         else:
             h_ims.set_data(0.5*dispI.permute(1, 2, 0)+0.5)
             mypause(0.01)
-        ''' 
-        
+        '''
+
     print('Time for 1 epoch: {}'.format(np.sum(totTime)))
