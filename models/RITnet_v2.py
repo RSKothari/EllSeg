@@ -206,40 +206,40 @@ class DenseNet2D(nn.Module):
                                        actBool=False,
                                        dp=0.0)
 
-    def forward(self, x, target, pupil_center, hMaps, elPts, elNorm, elPhi, spatWts, distMap, cond, ID, alpha):
-        '''
-        x: Input batch of images [B, 1, H, W]
-        target: Target semantic output of 3 classes [B, H, W]
-        pupil_center: Pupil center [B, 2]
-        hMaps: Heatmaps for iris and pupil landmarks [B, 2, 8, H, W]
-        elPts: Ellipse points [B, 2, 8, 2]
-        elNorm: Normalized ellipse parameters [B, 2, 5]
-        elPhi: Normalized ellipse phi values [B, 2, 5]
-        spatWts: Spatial weights for segmentation loss (boundary loss)
-        distMap: Distance map for segmentation loss (surface loss)
-        cond: A condition array for each entry which marks its status [B, 4]
-        ID: A Tensor containing information about the dataset or subset a entry
-        belongs to
-        alpha: Alpha score for various loss curicullum
-        '''
+    def forward(self,
+                x, # Input batch of images [B, 1, H, W]
+                target, # Target semantic output of 3 classes [B, H, W]
+                pupil_center, # Pupil center [B, 2]
+                hMaps, # Heatmaps for iris and pupil landmarks [B, 2, 8, H, W]
+                elPts, # Ellipse points [B, 2, 8, 2]
+                elNorm, # Normalized ellipse parameters [B, 2, 5]
+                elPhi, # Normalized ellipse phi values [B, 2, 5]
+                spatWts, # Spatial weights for segmentation loss (boundary loss)
+                distMap, # Distance map for segmentation loss (surface loss)
+                cond, # A condition array for each entry which marks its status [B, 4]
+                ID, # A Tensor containing information about the dataset or subset a entry
+                alpha): # Alpha score for various loss curicullum,
+
         x4, x3, x2, x1, x = self.enc(x)
         latent = torch.mean(x.flatten(start_dim=2), -1) # [B, features]
         elOut = self.bottleneck_lin(latent)
-        pred_c = elOut[:, 5:7] # Columns 5 & 6 correspond to pupil center
         op = self.dec(x4, x3, x2, x1, x)
         op_hmaps = self.dec_el(x4, x3, x2, x1, x) # [B, 16, H, W]
+        pred_c = elOut[:, 5:7] # Columns 5 & 6 correspond to pupil center
 
-        loss, pred_c_seg = get_allLoss(op, op_hmaps, elOut,
+        loss, pred_c_seg = get_allLoss(op, # Output segmentation map
+                                       op_hmaps, # Predicted heatmap
+                                       elOut, # Predicted Ellipse parameters
                                        target, # Segmentation targets
                                        pupil_center, # Pupil center
-                                       hMaps,
-                                       elPts, # Ellipse points
-                                       elNorm,
-                                       elPhi,
-                                       spatWts,
-                                       distMap,
-                                       cond,
-                                       ID,
+                                       hMaps, # Heatmaps
+                                       elPts, # Normalized ellipse points
+                                       elNorm, # Normalized ellipse equation
+                                       elPhi, # Normalized ellipse Phi
+                                       spatWts, # Spatial weights
+                                       distMap, # Distance maps
+                                       cond, # Condition
+                                       ID, # Image and dataset ID
                                        alpha)
 
         if self.disentangle:

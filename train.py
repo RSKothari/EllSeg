@@ -193,16 +193,16 @@ if __name__ == '__main__':
 
             model.toggle = True # This must always be true to optimize primary + conf loss
             output, op_hmaps, elOut, _, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
-                                                                      labels.to(device).long(),
-                                                                      hMaps.to(device).to(args.prec),
-                                                                      elPts.to(device).to(args.prec),
-                                                                      elNorm.to(device).to(args.prec),
-                                                                      elPhi.to(device).to(args.prec),
-                                                                      spatialWeights.to(device).to(args.prec),
-                                                                      distMap.to(device).to(args.prec),
-                                                                      cond.to(device).to(args.prec),
-                                                                      imInfo[:, 2].to(device).to(torch.long), # Send DS #
-                                                                      alpha)
+                                                                              labels.to(device).long(),
+                                                                              hMaps.to(device).to(args.prec),
+                                                                              elPts.to(device).to(args.prec),
+                                                                              elNorm.to(device).to(args.prec),
+                                                                              elPhi.to(device).to(args.prec),
+                                                                              spatialWeights.to(device).to(args.prec),
+                                                                              distMap.to(device).to(args.prec),
+                                                                              cond.to(device).to(args.prec),
+                                                                              imInfo[:, 2].to(device).to(torch.long), # Send DS #
+                                                                              alpha)
 
             loss = loss.mean() if args.useMultiGPU else loss
             loss.backward()

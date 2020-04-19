@@ -509,7 +509,7 @@ def get_ellipse_info(param, H, cond):
     '''
     if not cond:
         norm_param = my_ellipse(param).transform(H)[0][:-1] # We don't want the area
-        elPts = my_ellipse(param).generatePoints(50, 'equiAngle') # Regular points
+        elPts = my_ellipse(norm_param).generatePoints(50, 'equiAngle') # Regular points
         elPhi = my_ellipse(norm_param).recover_Phi() # Normalized Phi value
         elPts = np.stack(elPts, axis=1)
     else:

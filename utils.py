@@ -168,10 +168,10 @@ def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, override=False
     mask : numpy array [B, H, W]
         A batch first array which holds for individual pixels.
     hMaps: numpy array [B, C, N, H, W]
-        N is the # of points, C is the category the points belong to (iris or 
+        N is the # of points, C is the category the points belong to (iris or
         pupil). Heatmaps are gaussians centered around point of interest
     elNorm:numpy array [B, C, 5]
-        Normalized ellipse parameters 
+        Normalized ellipse parameters
     pupil_center : numpy array [B, 2]
         Identified pupil center for plotting.
     cond : numpy array [B, 5]
@@ -186,7 +186,7 @@ def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, override=False
     I_o : numpy array [Ho, Wo]
         Returns an array holding concatenated images from the input overlayed
         with segmentation mask, pupil center and pupil ellipse.
-        
+
     Note: If masks exist, then ellipse parameters would exist aswell.
     '''
     B, H, W = I.shape
@@ -203,7 +203,7 @@ def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, override=False
             im[rr, cc, ...] = np.array([0, 255, 0]) # Green
             rr, cc = np.where(mask[i, ...] == 2)
             im[rr, cc, ...] = np.array([255, 255, 0]) # Yellow
-            
+
             el_iris = my_ellipse(elNorm[i, 0, ...]).transform(H)[0]
             el_pupil = my_ellipse(elNorm[i, 1, ...]).transform(H)[0]
             [rr_i, cc_i] = ellipse_perimeter(int(el_iris[1]),
@@ -220,15 +220,15 @@ def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, override=False
             rr_p = rr_p.clip(6, im.shape[0]-6)
             cc_i = cc_i.clip(6, im.shape[1]-6)
             cc_p = cc_p.clip(6, im.shape[1]-6)
-            
+
             im[rr_i, cc_i, ...] = np.array([0, 0, 255])
             im[rr_p, cc_p, ...] = np.array([255, 0, 0])
-            
+
             irisMaps = np.mean(hMaps[i, 0, ...], axis=0)
             pupilMaps = np.mean(hMaps[i, 1, ...], axis=0)
             irisMaps = np.uint8(255*irisMaps/irisMaps.max())
             pupilMaps = np.uint8(255*pupilMaps/pupilMaps.max())
-            
+
             im = cv2.addWeighted(im,
                                 0.5,
                                 np.stack([irisMaps, irisMaps, irisMaps], axis=2),
@@ -254,14 +254,20 @@ def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, override=False
 
 def normPts(pts, sz):
     pts_o = copy.deepcopy(pts)
+    res = pts_o.shape
+    pts_o = pts_o.reshape(-1, 2)
     pts_o[:, 0] = 2*(pts_o[:, 0]/sz[1]) - 1
     pts_o[:, 1] = 2*(pts_o[:, 1]/sz[0]) - 1
+    pts_o = pts_o.reshape(res)
     return pts_o
 
 def unnormPts(pts, sz):
     pts_o = copy.deepcopy(pts)
+    res = pts_o.shape
+    pts_o = pts_o.reshape(-1, 2)
     pts_o[:, 0] = 0.5*sz[1]*(pts_o[:, 0] + 1)
     pts_o[:, 1] = 0.5*sz[0]*(pts_o[:, 1] + 1)
+    pts_o = pts_o.reshape(res)
     return pts_o
 
 def lossandaccuracy(args, loader, model, alpha, device):
@@ -330,9 +336,10 @@ def lossandaccuracy(args, loader, model, alpha, device):
 def points_to_heatmap(pts, std, res):
     # Given image resolution and variance, generate synthetic Gaussians around
     # points of interest for heat map regression.
-    # pts: [B, C, N, 2]
-    # H: [B, C, N, H, W]
+    # pts: [B, C, N, 2] Normalized points
+    # H: [B, C, N, H, W] Output heatmap
     B, C, N, _ = pts.shape
+    pts = unnormPts(pts, res) #
     grid = create_meshgrid(res[0], res[1], normalized_coordinates=False)
     grid = grid.squeeze()
     X = grid[..., 0]

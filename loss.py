@@ -12,7 +12,9 @@ import torch.nn.functional as F
 from utils import create_meshgrid, ElliFit
 from utils import normPts, spatial_softargmax_2d, spatial_softmax_2d
 
-def get_allLoss(op, op_hmaps, elOut, # Network outputs
+def get_allLoss(op,
+                op_hmaps,
+                elOut, # Network outputs
                 target, # Segmentation targets
                 pupil_center, # Pupil center
                 hMaps,
@@ -31,11 +33,12 @@ def get_allLoss(op, op_hmaps, elOut, # Network outputs
     elPts: Points along pupil or iris ellipse [B, 2, 16, 2]
     elPhi: Phi values from normalized ellipse equation
     '''
-    pred_c = elOut[:, 5:7]
     B = target.shape[0]
+    pred_c = elOut[:, 5:7]
+
     # Normalize output heatmap. Iris first policy.
-    hmaps_pup = F.log_softmax(op_hmaps[:, 8:, ...].view(B, 8, -1), dim=2)
     hmaps_iri = F.log_softmax(op_hmaps[:, :8, ...].view(B, 8, -1), dim=2)
+    hmaps_pup = F.log_softmax(op_hmaps[:, 8:, ...].view(B, 8, -1), dim=2)
 
     # Segmentation loss
     l_seg = get_segLoss(op, target, spatWts, distMap, cond, alpha)
@@ -46,47 +49,49 @@ def get_allLoss(op, op_hmaps, elOut, # Network outputs
     l_map = l_map_iri + l_map_pup
 
     # Soft argmax
-    temp = spatial_softmax_2d(op_hmaps)
-    pred_lmrks = spatial_softargmax_2d(temp, normalized_coordinates=False)
+    temp = spatial_softmax_2d(op_hmaps, torch.tensor(1.0))
+    pred_lmrks = spatial_softargmax_2d(temp, normalized_coordinates=True)
 
-    # Compute point losses
+    # Compute landmark based losses
     l_pt = get_ptLoss(pred_c, normPts(pupil_center, target.shape[1:]), cond[:, 0])
-
+    '''
     l_lmrks_iri = get_ptLoss(pred_lmrks[:, :8, :],
                              normPts(elPts[:, 0, ...],
-                                     target.shape[1:]), cond)
+                                     target.shape[1:]), cond[:, 1])
     l_lmrks_pup = get_ptLoss(pred_lmrks[:, 8:, :],
                              normPts(elPts[:, 1, ...],
-                                     target.shape[1:]), cond)
+                                     target.shape[1:]), cond[:, 1])
+    '''
+    l_lmrks_iri = get_ptLoss(pred_lmrks[:, :8, :], elPts[:, 0, ...], cond[:, 1])
+    l_lmrks_pup = get_ptLoss(pred_lmrks[:, 8:, :], elPts[:, 1, ...], cond[:, 1])
     l_lmrks = l_lmrks_iri + l_lmrks_pup
+
+    # Compute seg losses
+    l_seg2pt, pred_c_seg = get_seg2ptLoss(op[:, 2, ...],
+                                          normPts(pupil_center,
+                                                  target.shape[1:]), 1)
 
     # Enforce ellipse consistency loss
     iris_center = pred_lmrks[:, 8:, :].mean(dim=1)
-    iris_fit = ElliFit(pred_lmrks[:, :8, :], pred_c) # Pupil fit
+    iris_fit = ElliFit(pred_lmrks[:, :8, :], pred_c_seg) # Pupil fit
     pupil_fit = ElliFit(pred_lmrks[:, 8:, :], iris_center) # Iris fit
     l_fits = get_ptLoss(iris_fit, elPhi[:, 0, :]) + get_ptLoss(pupil_fit, elPhi[:, 1, :])
 
     # Compute ellipse losses - F1 loss for valid samples
     l_ellipse = get_ptLoss(elOut, elNorm.view(-1, 10), cond[:, 1])
 
-    # Compute seg losses
-    l_seg2pt, pred_c_seg = get_seg2ptLoss(op[:, 2, ...],
-                                          normPts(pupil_center,
-                                                  target.shape[1:]), 1, cond)
-
     return (l_map + l_lmrks + l_fits + l_ellipse + l_seg2pt + l_pt + 10*l_seg,
             pred_c_seg,
             torch.stack([iris_fit,
                          pupil_fit], dim=1))
 
-def get_seg2ptLoss(op, gtPts, temperature, cond):
+def get_seg2ptLoss(op, gtPts, temperature):
     # Custom function to find the pupilary center of mass to detected pupil
     # center
     # op: BXHXW - single channel corresponding to pupil
     B, H, W = op.shape
     wtMap = F.softmax(op.view(B, -1)*temperature, dim=1) # [B, HXW]
 
-    #cond = (1-cond[:, 1]).to(torch.bool)
     XYgrid = create_meshgrid(H, W, normalized_coordinates=True) # 1xHxWx2
 
     xloc = XYgrid[0, :, :, 0].reshape(-1).cuda()
@@ -95,11 +100,7 @@ def get_seg2ptLoss(op, gtPts, temperature, cond):
     xpos = torch.sum(wtMap*xloc, -1, keepdim=True)
     ypos = torch.sum(wtMap*yloc, -1, keepdim=True)
     predPts = torch.stack([xpos, ypos], dim=1).squeeze()
-    '''
-    loss = F.l1_loss(predPts[cond, :],
-                     gtPts[cond, :],
-                     reduction='mean')
-    '''
+
     loss = F.l1_loss(predPts, gtPts, reduction='mean')
     return loss, predPts
 
@@ -200,9 +201,8 @@ def conf_Loss(x, gt, flag):
     if flag:
         B, C = x.shape
         # If true, return the confusion loss
-        #loss = torch.mean(torch.mean(-F.log_softmax(x, dim=1), dim=1))
         loss = F.kl_div(F.log_softmax(x, dim=1),
-                        torch.ones(B, C)/C)
+                        torch.ones(B, C).cuda()/C)
     else:
         # Else, return the secondary loss
         loss = F.cross_entropy(x, gt)
