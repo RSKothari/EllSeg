@@ -37,33 +37,28 @@ def get_allLoss(op,
     pred_c = elOut[:, 5:7]
 
     # Normalize output heatmap. Iris first policy.
-    hmaps_iri = F.log_softmax(op_hmaps[:, :8, ...].view(B, 8, -1), dim=2)
-    hmaps_pup = F.log_softmax(op_hmaps[:, 8:, ...].view(B, 8, -1), dim=2)
+    hmaps_iri = F.log_softmax(op_hmaps[:, :8, ...], dim=2)
+    hmaps_pup = F.log_softmax(op_hmaps[:, 8:, ...], dim=2)
 
     # Segmentation loss
     l_seg = get_segLoss(op, target, spatWts, distMap, cond, alpha)
 
     # KL: loss
-    l_map_iri = F.kl_div(hmaps_iri, hMaps[:, 0, ...])
-    l_map_pup = F.kl_div(hmaps_pup, hMaps[:, 1, ...])
+    l_map_iri = F.kl_div(hmaps_iri, hMaps[:, 0, ...], reduction='batchmean')
+    l_map_pup = F.kl_div(hmaps_pup, hMaps[:, 1, ...], reduction='batchmean')
     l_map = l_map_iri + l_map_pup
 
     # Soft argmax
     temp = spatial_softmax_2d(op_hmaps, torch.tensor(1.0))
     pred_lmrks = spatial_softargmax_2d(temp, normalized_coordinates=True)
+    iris_lmrks = pred_lmrks[:, :8, :]
+    pupil_lmrks = pred_lmrks[:, 8:, :]
 
     # Compute landmark based losses
     l_pt = get_ptLoss(pred_c, normPts(pupil_center, target.shape[1:]), cond[:, 0])
-    '''
-    l_lmrks_iri = get_ptLoss(pred_lmrks[:, :8, :],
-                             normPts(elPts[:, 0, ...],
-                                     target.shape[1:]), cond[:, 1])
-    l_lmrks_pup = get_ptLoss(pred_lmrks[:, 8:, :],
-                             normPts(elPts[:, 1, ...],
-                                     target.shape[1:]), cond[:, 1])
-    '''
-    l_lmrks_iri = get_ptLoss(pred_lmrks[:, :8, :], elPts[:, 0, ...], cond[:, 1])
-    l_lmrks_pup = get_ptLoss(pred_lmrks[:, 8:, :], elPts[:, 1, ...], cond[:, 1])
+
+    l_lmrks_iri = get_ptLoss(iris_lmrks, elPts[:, 0, ...], cond[:, 1])
+    l_lmrks_pup = get_ptLoss(pupil_lmrks, elPts[:, 1, ...], cond[:, 1])
     l_lmrks = l_lmrks_iri + l_lmrks_pup
 
     # Compute seg losses
@@ -72,16 +67,19 @@ def get_allLoss(op,
                                                   target.shape[1:]), 1)
 
     # Enforce ellipse consistency loss
-    iris_center = pred_lmrks[:, 8:, :].mean(dim=1)
-    iris_fit = ElliFit(pred_lmrks[:, :8, :], pred_c_seg) # Pupil fit
-    pupil_fit = ElliFit(pred_lmrks[:, 8:, :], iris_center) # Iris fit
-    l_fits = get_ptLoss(iris_fit, elPhi[:, 0, :]) + get_ptLoss(pupil_fit, elPhi[:, 1, :])
+    iris_center = iris_lmrks.mean(dim=1)
+    iris_fit = ElliFit(iris_lmrks, iris_center, cond[:, 1]) # Pupil fit
+    pupil_fit = ElliFit(pupil_lmrks, pred_c_seg, cond[:, 1]) # Iris fit
+    l_fits = get_ptLoss(iris_fit, elPhi[:, 0, :], cond[:, 1]) + \
+             get_ptLoss(pupil_fit, elPhi[:, 1, :], cond[:, 1])
 
     # Compute ellipse losses - F1 loss for valid samples
     l_ellipse = get_ptLoss(elOut, elNorm.view(-1, 10), cond[:, 1])
 
     return (l_map + l_lmrks + l_fits + l_ellipse + l_seg2pt + l_pt + 10*l_seg,
             pred_c_seg,
+            torch.stack([hmaps_iri,
+                         hmaps_pup], dim=1),
             torch.stack([iris_fit,
                          pupil_fit], dim=1))
 

@@ -194,6 +194,7 @@ if __name__ == '__main__':
             model.toggle = True # This must always be true to optimize primary + conf loss
             output, op_hmaps, elOut, _, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
                                                                               labels.to(device).long(),
+                                                                              pupil_center.to(device).to(args.prec),
                                                                               hMaps.to(device).to(args.prec),
                                                                               elPts.to(device).to(args.prec),
                                                                               elNorm.to(device).to(args.prec),
@@ -231,8 +232,10 @@ if __name__ == '__main__':
                               img.shape[2:])
             seg_c = unnormPts(seg_center.detach().cpu().numpy(),
                               img.shape[2:])
-            dispI = generateImageGrid(img.numpy(),
+            dispI = generateImageGrid(img.squeeze().numpy(),
                                       predict.numpy(),
+                                      op_hmaps.detach().cpu().numpy(),
+                                      elOut.detach().cpu().numpy().reshape(-1, 2, 5),
                                       pup_c,
                                       cond.numpy(),
                                       override=True)

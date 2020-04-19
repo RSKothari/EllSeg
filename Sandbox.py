@@ -41,7 +41,7 @@ if __name__=='__main__':
     trainObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'train', True, (480, 640), 0.5)
     validObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'valid', False, (480, 640), 0.5)
     '''
-    f = os.path.join('curObjects', 'cond_0.pkl')
+    f = os.path.join('curObjects', 'cond_1.pkl')
     trainObj, validObj, _ = pickle.load(open(f, 'rb'))
     trainObj.path2data = path2h5
 

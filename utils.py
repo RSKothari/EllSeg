@@ -243,7 +243,7 @@ def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, override=False
             rr, cc = circle(pupil_center[i, 1].clip(6, im.shape[0]-6),
                             pupil_center[i, 0].clip(6, im.shape[1]-6),
                             5)
-            im[rr, cc, ...] = 1
+            im[rr, cc, ...] = 255
         I_o.append(im)
     I_o = np.stack(I_o, axis=0)
     I_o = np.moveaxis(I_o, 3, 1)
@@ -355,7 +355,7 @@ def points_to_heatmap(pts, std, res):
     H = H/(2*np.pi*std**2) # This makes the summation == 1 per image in a batch
     return H
 
-def ElliFit(self, coords, mns, cond):
+def ElliFit(coords, mns, cond):
     '''
     Parameters
     ----------

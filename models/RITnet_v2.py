@@ -227,20 +227,21 @@ class DenseNet2D(nn.Module):
         op_hmaps = self.dec_el(x4, x3, x2, x1, x) # [B, 16, H, W]
         pred_c = elOut[:, 5:7] # Columns 5 & 6 correspond to pupil center
 
-        loss, pred_c_seg = get_allLoss(op, # Output segmentation map
-                                       op_hmaps, # Predicted heatmap
-                                       elOut, # Predicted Ellipse parameters
-                                       target, # Segmentation targets
-                                       pupil_center, # Pupil center
-                                       hMaps, # Heatmaps
-                                       elPts, # Normalized ellipse points
-                                       elNorm, # Normalized ellipse equation
-                                       elPhi, # Normalized ellipse Phi
-                                       spatWts, # Spatial weights
-                                       distMap, # Distance maps
-                                       cond, # Condition
-                                       ID, # Image and dataset ID
-                                       alpha)
+        op_tup = get_allLoss(op, # Output segmentation map
+                            op_hmaps, # Predicted heatmap
+                            elOut, # Predicted Ellipse parameters
+                            target, # Segmentation targets
+                            pupil_center, # Pupil center
+                            hMaps, # Heatmaps
+                            elPts, # Normalized ellipse points
+                            elNorm, # Normalized ellipse equation
+                            elPhi, # Normalized ellipse Phi
+                            spatWts, # Spatial weights
+                            distMap, # Distance maps
+                            cond, # Condition
+                            ID, # Image and dataset ID
+                            alpha)
+        loss, pred_c_seg, op_hmaps, eleFits = op_tup
 
         if self.disentangle:
             pred_ds = self.dsIdentify_lin(latent)
