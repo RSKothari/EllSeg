@@ -33,12 +33,14 @@ def get_allLoss(op,
     elPts: Points along pupil or iris ellipse [B, 2, 16, 2]
     elPhi: Phi values from normalized ellipse equation
     '''
-    B = op.shape[0]
+    B, C, H, W = op.shape
     pred_c = elOut[:, 5:7]
 
     # Normalize output heatmap. Iris first policy.
-    hmaps_iri = F.log_softmax(op_hmaps[:, :8, ...], dim=2)
-    hmaps_pup = F.log_softmax(op_hmaps[:, 8:, ...], dim=2)
+    hmaps_iri = F.log_softmax(op_hmaps[:, :8, ...].view(B, 8, -1), dim=2)
+    hmaps_pup = F.log_softmax(op_hmaps[:, 8:, ...].view(B, 8, -1), dim=2)
+    hmaps_iri = hmaps_iri.view(B, 8, H, W)
+    hmaps_pup = hmaps_pup.view(B, 8, H, W)
 
     # Segmentation loss
     l_seg = get_segLoss(op, target, spatWts, distMap, cond, alpha)
@@ -80,8 +82,17 @@ def get_allLoss(op,
 
     # Compute ellipse losses - F1 loss for valid samples
     l_ellipse = get_ptLoss(elOut, elNorm.view(-1, 10), cond[:, 1])
+    '''
+    print('l_map: {}. l_lmrks: {}. l_ellipse: {}. l_seg2pt: {}. l_pt: {}. l_seg: {}'.format(
+        l_map.item(),
+        l_lmrks.item(),
+        l_ellipse.item(),
+        l_seg2pt.item(),
+        l_pt.item(),
+        l_seg.item()))
+    '''
 
-    return (l_map + l_lmrks + l_fits + l_ellipse + l_seg2pt + l_pt + 10*l_seg,
+    return (0.005*l_map + l_lmrks + l_fits + l_ellipse + l_seg2pt + l_pt + 20*l_seg,
             pred_c_seg,
             torch.stack([hmaps_iri,
                          hmaps_pup], dim=1),
