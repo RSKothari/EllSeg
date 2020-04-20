@@ -311,20 +311,20 @@ def lossandaccuracy(args, loader, model, alpha, device):
                             cond.to(device).to(args.prec),
                             imInfo[:, 2].to(device).to(torch.long), # Send DS #
                             alpha)
-            output, op_hmaps, elOut, latent, pred_center, seg_center, loss = op_tup
+            output, op_hmaps, elOut, latent, pred_center, seg_center, eleFit, loss = op_tup
             latent_codes.append(latent.detach().cpu())
             loss = loss.mean() if args.useMultiGPU else loss
             epoch_loss.append(loss.item())
 
             ptDist = getPoint_metric(pupil_center.numpy(),
                                      pred_center.detach().cpu().numpy(),
-                                     cond.numpy(),
+                                     cond[:, 0].numpy(),
                                      img.shape[2:],
                                      True)[0] # Unnormalizes the points
 
             ptDist_seg = getPoint_metric(pupil_center.numpy(),
                                          seg_center.detach().cpu().numpy(),
-                                         cond.numpy(),
+                                         cond[:, 0].numpy(),
                                          img.shape[2:],
                                          True)[0] # Unnormalizes the points
             pup_c_lat_dists.append(ptDist)
