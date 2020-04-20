@@ -92,7 +92,7 @@ def get_allLoss(op,
         l_seg.item()))
     '''
 
-    return (0.005*l_map + l_lmrks + l_fits + l_ellipse + l_seg2pt + l_pt + 20*l_seg,
+    return (0.05*l_map + l_lmrks + l_fits + l_ellipse + l_seg2pt + l_pt + 20*l_seg,
             pred_c_seg,
             torch.stack([hmaps_iri,
                          hmaps_pup], dim=1),

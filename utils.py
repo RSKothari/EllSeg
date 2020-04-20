@@ -357,7 +357,7 @@ def points_to_heatmap(pts, std, res):
     Y = Y - torch.stack(np.prod(res)*[pts[..., 1]], axis=3).reshape(B, C, N, res[0], res[1])
 
     H = torch.exp(-(X**2 + Y**2)/(2*std**2))
-    H = H/(2*np.pi*std**2) # This makes the summation == 1 per image in a batch
+    #H = H/(2*np.pi*std**2) # This makes the summation == 1 per image in a batch
     return H
 
 def ElliFit(coords, mns):
