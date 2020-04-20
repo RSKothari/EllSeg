@@ -260,7 +260,7 @@ class DenseNet2D(nn.Module):
             # No disentanglement, proceed regularly
             if self.selfCorr:
                 loss = loss + F.l1_loss(pred_c_seg, pred_c)
-        return op, op_hmaps, elOut, latent, pred_c, pred_c_seg, loss.unsqueeze(0)
+        return op, op_hmaps, elOut, latent, pred_c, pred_c_seg, eleFit, loss.unsqueeze(0)
 
     def _initialize_weights(self):
         for m in self.modules():

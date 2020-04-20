@@ -153,7 +153,7 @@ def getPoint_metric(y_true, y_pred, cond, sz, do_unnorm):
         y_pred = unnormPts(y_pred, sz)
 
     cond = cond.astype(np.bool)
-    flag = (~cond[:, 0]).astype(np.float)
+    flag = (~cond).astype(np.float)
     dist = metrics.pairwise_distances(y_true, y_pred, metric='euclidean')
     dist = flag*np.diag(dist)
     return (np.sum(dist)/np.sum(flag) if np.any(flag) else np.nan,
@@ -291,22 +291,27 @@ def lossandaccuracy(args, loader, model, alpha, device):
     '''
     epoch_loss = []
     ious = []
-    dists = []
-    dists_seg = []
+    pup_c_lat_dists = []
+    pup_c_seg_dists = []
     model.eval()
     latent_codes = []
     with torch.no_grad():
         for bt, batchdata in enumerate(tqdm.tqdm(loader)):
-            img, labels, spatialWeights, distMap, elPhi, elPts, cond, imInfo = batchdata
-            pupil_center = elPts[:, 1, ...]
-            output, latent, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
-                                                              labels.to(device).long(),
-                                                              pupil_center.to(device).to(args.prec),
-                                                              spatialWeights.to(device).to(args.prec),
-                                                              distMap.to(device).to(args.prec),
-                                                              cond.to(device).to(args.prec),
-                                                              imInfo[:, 2].to(device).to(torch.long),
-                                                              alpha)
+            img, labels, spatialWeights, distMap, pupil_center, elPhi, elPts, elNorm, cond, imInfo = batchdata
+            hMaps = points_to_heatmap(elPts, 2, img.shape[2:])
+            op_tup = model(img.to(device).to(args.prec),
+                            labels.to(device).long(),
+                            pupil_center.to(device).to(args.prec),
+                            hMaps.to(device).to(args.prec),
+                            elPts.to(device).to(args.prec),
+                            elNorm.to(device).to(args.prec),
+                            elPhi.to(device).to(args.prec),
+                            spatialWeights.to(device).to(args.prec),
+                            distMap.to(device).to(args.prec),
+                            cond.to(device).to(args.prec),
+                            imInfo[:, 2].to(device).to(torch.long), # Send DS #
+                            alpha)
+            output, op_hmaps, elOut, latent, pred_center, seg_center, loss = op_tup
             latent_codes.append(latent.detach().cpu())
             loss = loss.mean() if args.useMultiGPU else loss
             epoch_loss.append(loss.item())
@@ -322,8 +327,8 @@ def lossandaccuracy(args, loader, model, alpha, device):
                                          cond.numpy(),
                                          img.shape[2:],
                                          True)[0] # Unnormalizes the points
-            dists.append(ptDist)
-            dists_seg.append(ptDist_seg)
+            pup_c_lat_dists.append(ptDist)
+            pup_c_seg_dists.append(ptDist_seg)
 
             predict = get_predictions(output)
             iou = getSeg_metrics(labels.numpy(),
@@ -331,7 +336,7 @@ def lossandaccuracy(args, loader, model, alpha, device):
                                  cond.numpy())[1]
             ious.append(iou)
     ious = np.stack(ious, axis=0)
-    return np.mean(epoch_loss), np.nanmean(ious, 0), dists, dists_seg, latent_codes
+    return np.mean(epoch_loss), np.nanmean(ious, 0), pup_c_lat_dists, pup_c_seg_dists, latent_codes
 
 def points_to_heatmap(pts, std, res):
     # Given image resolution and variance, generate synthetic Gaussians around
@@ -355,7 +360,7 @@ def points_to_heatmap(pts, std, res):
     H = H/(2*np.pi*std**2) # This makes the summation == 1 per image in a batch
     return H
 
-def ElliFit(coords, mns, cond):
+def ElliFit(coords, mns):
     '''
     Parameters
     ----------

@@ -33,7 +33,6 @@ def get_allLoss(op,
     elPts: Points along pupil or iris ellipse [B, 2, 16, 2]
     elPhi: Phi values from normalized ellipse equation
     '''
-    B = target.shape[0]
     pred_c = elOut[:, 5:7]
 
     # Normalize output heatmap. Iris first policy.
@@ -68,8 +67,8 @@ def get_allLoss(op,
 
     # Enforce ellipse consistency loss
     iris_center = iris_lmrks.mean(dim=1)
-    iris_fit = ElliFit(iris_lmrks, iris_center, cond[:, 1]) # Pupil fit
-    pupil_fit = ElliFit(pupil_lmrks, pred_c_seg, cond[:, 1]) # Iris fit
+    iris_fit = ElliFit(iris_lmrks, iris_center) # Pupil fit
+    pupil_fit = ElliFit(pupil_lmrks, pred_c_seg) # Iris fit
     l_fits = get_ptLoss(iris_fit, elPhi[:, 0, :], cond[:, 1]) + \
              get_ptLoss(pupil_fit, elPhi[:, 1, :], cond[:, 1])
 

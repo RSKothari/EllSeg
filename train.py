@@ -138,8 +138,8 @@ if __name__ == '__main__':
     for epoch in range(startEp, args.epochs):
         accLoss = 0.0
         ious = []
-        dists = []
-        dists_seg = []
+        pup_c_lat_dists = []
+        pup_c_seg_dists = []
         model.train()
         alpha = linVal(epoch, (0, args.epochs), (0, 1), 0)
 
@@ -192,18 +192,19 @@ if __name__ == '__main__':
                 '''
 
             model.toggle = True # This must always be true to optimize primary + conf loss
-            output, op_hmaps, elOut, _, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
-                                                                              labels.to(device).long(),
-                                                                              pupil_center.to(device).to(args.prec),
-                                                                              hMaps.to(device).to(args.prec),
-                                                                              elPts.to(device).to(args.prec),
-                                                                              elNorm.to(device).to(args.prec),
-                                                                              elPhi.to(device).to(args.prec),
-                                                                              spatialWeights.to(device).to(args.prec),
-                                                                              distMap.to(device).to(args.prec),
-                                                                              cond.to(device).to(args.prec),
-                                                                              imInfo[:, 2].to(device).to(torch.long), # Send DS #
-                                                                              alpha)
+            out_tup = model(img.to(device).to(args.prec),
+                            labels.to(device).long(),
+                            pupil_center.to(device).to(args.prec),
+                            hMaps.to(device).to(args.prec),
+                            elPts.to(device).to(args.prec),
+                            elNorm.to(device).to(args.prec),
+                            elPhi.to(device).to(args.prec),
+                            spatialWeights.to(device).to(args.prec),
+                            distMap.to(device).to(args.prec),
+                            cond.to(device).to(args.prec),
+                            imInfo[:, 2].to(device).to(torch.long), # Send DS #
+                            alpha)
+            output, op_hmaps, elOut, _, pred_center, seg_center, eleFit, loss = out_tup
 
             loss = loss.mean() if args.useMultiGPU else loss
             loss.backward()
@@ -216,16 +217,16 @@ if __name__ == '__main__':
                                  cond.numpy())[1]
             ptDist = getPoint_metric(pupil_center.numpy(),
                                      pred_center.detach().cpu().numpy(),
-                                     cond.numpy(),
+                                     cond[:,0].numpy(),
                                      img.shape[2:],
                                      True)[0] # Unnormalizes the points
             ptDist_seg = getPoint_metric(pupil_center.numpy(),
                                          seg_center.detach().cpu().numpy(),
-                                         cond.numpy(),
+                                         cond[:,0].numpy(),
                                          img.shape[2:],
                                          True)[0] # Unnormalizes the points
-            dists.append(ptDist)
-            dists_seg.append(ptDist_seg)
+            pup_c_lat_dists.append(ptDist)
+            pup_c_seg_dists.append(ptDist_seg)
             ious.append(iou)
 
             pup_c = unnormPts(pred_center.detach().cpu().numpy(),
@@ -260,23 +261,23 @@ if __name__ == '__main__':
 
         # Add info to tensorboard
         writer.add_scalar('train/loss', accLoss/bt, epoch)
-        writer.add_scalars('train/pup_dst', {'mu':np.nanmean(dists),
-                                             'std':np.nanstd(dists)}, epoch)
-        writer.add_scalars('train/seg_dst', {'mu':np.nanmean(dists_seg),
-                                             'std':np.nanstd(dists_seg)}, epoch)
+        writer.add_scalars('train/pup_l_c', {'mu':np.nanmean(pup_c_lat_dists),
+                                             'std':np.nanstd(pup_c_lat_dists)}, epoch)
+        writer.add_scalars('train/pup_s_c', {'mu':np.nanmean(pup_c_seg_dists),
+                                             'std':np.nanstd(pup_c_seg_dists)}, epoch)
         writer.add_scalars('train/iou', {'mIOU':np.mean(ious),
                                          'bG':ious[0],
                                          'iris':ious[1],
                                          'pupil':ious[2]}, epoch)
 
-        lossvalid, ious, dists, dists_seg, latent_codes = lossandaccuracy(args, validloader, model, alpha, device)
+        lossvalid, ious, pup_c_lat_dists, pup_c_seg_dists, latent_codes = lossandaccuracy(args, validloader, model, alpha, device)
 
         # Add valid info to tensorboard
         writer.add_scalar('valid/loss', lossvalid, epoch)
-        writer.add_scalars('valid/pup_dst', {'mu':np.nanmean(dists),
-                                             'std':np.nanstd(dists)}, epoch)
-        writer.add_scalars('valid/seg_dst', {'mu':np.nanmean(dists_seg),
-                                             'std':np.nanstd(dists_seg)}, epoch)
+        writer.add_scalars('valid/pup_l_c', {'mu':np.nanmean(pup_c_lat_dists),
+                                             'std':np.nanstd(pup_c_lat_dists)}, epoch)
+        writer.add_scalars('valid/pup_s_c', {'mu':np.nanmean(pup_c_seg_dists),
+                                             'std':np.nanstd(pup_c_seg_dists)}, epoch)
         writer.add_scalars('valid/iou', {'mIOU':np.mean(ious),
                                          'bG':ious[0],
                                          'iris':ious[1],
@@ -299,7 +300,7 @@ if __name__ == '__main__':
         stateDict = model.state_dict() if not args.useMultiGPU else model.module.state_dict()
         netDict['state_dict'] = {k: v for k, v in stateDict.items() if 'dsIdentify_lin' not in k}
 
-        scoreTracker = np.mean(ious) + 2 - 2.5e-3*(np.nanmean(dists) + np.nanmean(dists_seg)) # Max value 3
+        scoreTracker = np.mean(ious) + 2 - 2.5e-3*(np.nanmean(pup_c_lat_dists) + np.nanmean(pup_c_seg_dists)) # Max value 3
         scheduler.step(scoreTracker)
         early_stopping(scoreTracker, netDict)
 

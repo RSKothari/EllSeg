@@ -69,6 +69,8 @@ class my_ellipse():
         ----------
         Phi : np.array [5, ]
             for information on Phi values, please refer to ElliFit.
+        xm : int
+        ym : int
 
         Returns
         -------
