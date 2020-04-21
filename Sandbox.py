@@ -41,14 +41,14 @@ if __name__=='__main__':
     trainObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'train', True, (480, 640), 0.5)
     validObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'valid', False, (480, 640), 0.5)
     '''
-    f = os.path.join('curObjects', 'cond_1.pkl')
+    f = os.path.join('curObjects', 'cond_0.pkl')
     trainObj, validObj, _ = pickle.load(open(f, 'rb'))
     trainObj.path2data = path2h5
 
     trainLoader = DataLoader(trainObj,
                              batch_size=16,
                              shuffle=True,
-                             num_workers=0,
+                             num_workers=8,
                              drop_last=True)
     fig, axs = plt.subplots(nrows=1, ncols=1)
     totTime = []
@@ -70,7 +70,7 @@ if __name__=='__main__':
 
         if bt == 0:
             h_ims = axs.imshow(0.5*dispI.permute(1, 2, 0)+0.5, cmap='gray')
-            plt.show()
+            plt.show(block=False)
             plt.pause(0.01)
         else:
             h_ims.set_data(0.5*dispI.permute(1, 2, 0)+0.5)

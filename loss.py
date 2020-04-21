@@ -37,21 +37,25 @@ def get_allLoss(op,
     pred_c = elOut[:, 5:7]
 
     # Normalize output heatmap. Iris first policy.
-    hmaps_iri = F.log_softmax(op_hmaps[:, :8, ...].view(B, 8, -1), dim=2)
-    hmaps_pup = F.log_softmax(op_hmaps[:, 8:, ...].view(B, 8, -1), dim=2)
-    hmaps_iri = hmaps_iri.view(B, 8, H, W)
-    hmaps_pup = hmaps_pup.view(B, 8, H, W)
+    hmaps_iri = op_hmaps[:, :8, ...]
+    hmaps_pup = op_hmaps[:, 8:, ...]
+    #hmaps_iri = F.log_softmax(op_hmaps[:, :8, ...].view(B, 8, -1), dim=2)
+    #hmaps_pup = F.log_softmax(op_hmaps[:, 8:, ...].view(B, 8, -1), dim=2)
+    #hmaps_iri = hmaps_iri.view(B, 8, H, W)
+    #hmaps_pup = hmaps_pup.view(B, 8, H, W)
 
     # Segmentation loss
     l_seg = get_segLoss(op, target, spatWts, distMap, cond, alpha)
 
     # KL: loss
-    l_map_iri = F.kl_div(hmaps_iri, hMaps[:, 0, ...], reduction='batchmean')
-    l_map_pup = F.kl_div(hmaps_pup, hMaps[:, 1, ...], reduction='batchmean')
+    #l_map_iri = F.kl_div(hmaps_iri, hMaps[:, 0, ...], reduction='batchmean')
+    #l_map_pup = F.kl_div(hmaps_pup, hMaps[:, 1, ...], reduction='batchmean')
+    l_map_iri = F.l1_loss(hmaps_iri, hMaps[:, 0, ...])
+    l_map_pup = F.l1_loss(hmaps_pup, hMaps[:, 1, ...])
     l_map = l_map_iri + l_map_pup
 
     # Soft argmax
-    temp = spatial_softmax_2d(op_hmaps, torch.tensor(1.0))
+    temp = spatial_softmax_2d(op_hmaps, torch.tensor(50.0))
     pred_lmrks = spatial_softargmax_2d(temp, normalized_coordinates=True)
     iris_lmrks = pred_lmrks[:, :8, :]
     pupil_lmrks = pred_lmrks[:, 8:, :]
@@ -92,7 +96,7 @@ def get_allLoss(op,
         l_seg.item()))
     '''
 
-    return (0.05*l_map + l_lmrks + l_fits + l_ellipse + l_seg2pt + l_pt + 20*l_seg,
+    return (l_map + l_lmrks + l_fits + l_ellipse + l_seg2pt + l_pt + 20*l_seg,
             pred_c_seg,
             torch.stack([hmaps_iri,
                          hmaps_pup], dim=1),

@@ -180,7 +180,7 @@ class my_ellipse():
             N = len(T)
             x = self.param[2]*np.cos(T)
             y = self.param[3]*np.sin(T)
-            H_rot = rotation_2d(self.param[-1])
+            H_rot = rotation_2d(-self.param[-1])
             X1 = H_rot.dot(np.stack([x, y, np.ones(N, )], axis=0))
 
             x_r = X1[0, :] + self.param[0]
