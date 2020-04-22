@@ -226,8 +226,8 @@ class ElliFit():
         ym = np.mean(self.data[:, 1])
         x = self.data[:, 0] - xm
         y = self.data[:, 1] - ym
-        X = np.stack([-x**2, -x*y, x, y, -np.ones((np.size(x), ))], axis=1)
-        Y = y**2
+        X = np.stack([x**2, 2*x*y, -2*x, -2*y, -np.ones((np.size(x), ))], axis=1)
+        Y = -y**2
         if self.weighted:
             self.Phi = np.linalg.inv(
                 X.T.dot(np.diag(self.W)).dot(X)
@@ -236,7 +236,7 @@ class ElliFit():
                     )
         else:
             try:
-                self.Phi = np.linalg.inv(np.matmul(X.T, X)).dot(np.matmul(X.T, Y))
+                self.Phi = np.matmul(np.linalg.inv(np.matmul(X.T, X)), np.matmul(X.T, Y))
             except:
                 self.Phi = -1*np.ones(5, )
         '''
