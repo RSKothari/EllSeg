@@ -226,8 +226,8 @@ class ElliFit():
         ym = np.mean(self.data[:, 1])
         x = self.data[:, 0] - xm
         y = self.data[:, 1] - ym
-        X = np.stack([-x**2, -x*y, x, y, -np.ones((np.size(x), ))], axis=1)
-        Y = y**2
+        X = np.stack([x**2, 2*x*y, -2*x, -2*y, -np.ones((np.size(x), ))], axis=1)
+        Y = -y**2
         if self.weighted:
             self.Phi = np.linalg.inv(
                 X.T.dot(np.diag(self.W)).dot(X)
@@ -236,7 +236,7 @@ class ElliFit():
                     )
         else:
             try:
-                self.Phi = np.linalg.inv(np.matmul(X.T, X)).dot(np.matmul(X.T, Y))
+                self.Phi = np.matmul(np.linalg.inv(np.matmul(X.T, X)), np.matmul(X.T, Y))
             except:
                 self.Phi = -1*np.ones(5, )
         '''
@@ -259,15 +259,14 @@ class ElliFit():
             model = [-1, -1, -1, -1, -1]
         '''
         try:
-            Phi = self.Phi
-            x0=(Phi[2]-Phi[3]*Phi[1])/((Phi[0])-(Phi[1])^2)
-            y0=(Phi[0]*Phi[3]-Phi[2]*Phi[1])/((Phi[0])-(Phi[1])^2)
-            term2=np.sqrt(((1-Phi[0])^2+4*(Phi[1])^2))
-            term3=(Phi[4]+(y0)^2+(x0^2)*Phi[0]+2*Phi[1])
-            term1=1+Phi[0]
+            x0=(self.Phi[2]-self.Phi[3]*self.Phi[1])/((self.Phi[0])-(self.Phi[1])**2)
+            y0=(self.Phi[0]*self.Phi[3]-self.Phi[2]*self.Phi[1])/((self.Phi[0])-(self.Phi[1])**2)
+            term2=np.sqrt(((1-self.Phi[0])**2+4*(self.Phi[1])**2))
+            term3=(self.Phi[4]+(y0)**2+(x0**2)*self.Phi[0]+2*self.Phi[1])
+            term1=1+self.Phi[0]
             b=(np.sqrt(2*term3/(term1+term2)))
             a=(np.sqrt(2*term3/(term1-term2)))
-            alpha=0.5*np.arctan2(2*Phi[1],1-Phi[0])
+            alpha=0.5*np.arctan2(2*self.Phi[1],1-self.Phi[0])
             model = [x0+xm, y0+ym, a, b, -alpha]
         except:
             print('Inappropriate model generated')
