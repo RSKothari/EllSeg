@@ -239,7 +239,7 @@ class ElliFit():
                 self.Phi = np.linalg.inv(np.matmul(X.T, X)).dot(np.matmul(X.T, Y))
             except:
                 self.Phi = -1*np.ones(5, )
-
+        '''
         if self.verify_fit():
             N = np.prod(self.Phi[1:4]) - self.Phi[0]*(self.Phi[3]**2) - self.Phi[2]**2 - self.Phi[4]*(self.Phi[1]**2 - 4*self.Phi[0])
             D1 = (self.Phi[1]**2 - 4*self.Phi[0])*(1 + self.Phi[0] - np.sqrt((1 - self.Phi[0])**2 + self.Phi[1]**2))
@@ -257,8 +257,27 @@ class ElliFit():
 
         else:
             model = [-1, -1, -1, -1, -1]
+        '''
+        try:
+            Phi = self.Phi
+            x0=(Phi[2]-Phi[3]*Phi[1])/((Phi[0])-(Phi[1])^2)
+            y0=(Phi[0]*Phi[3]-Phi[2]*Phi[1])/((Phi[0])-(Phi[1])^2)
+            term2=np.sqrt(((1-Phi[0])^2+4*(Phi[1])^2))
+            term3=(Phi[4]+(y0)^2+(x0^2)*Phi[0]+2*Phi[1])
+            term1=1+Phi[0]
+            b=(np.sqrt(2*term3/(term1+term2)))
+            a=(np.sqrt(2*term3/(term1-term2)))
+            alpha=0.5*np.arctan2(2*Phi[1],1-Phi[0])
+            model = [x0+xm, y0+ym, a, b, -alpha]
+        except:
+            print('Inappropriate model generated')
+            model = [np.nan, np.nan, np.nan, np.nan, np.nan]
+        if np.all(np.isreal(model)) and np.all(~np.isnan(model)) and np.all(~np.isinf(model)):
+            model = model
+        else:
+            model = [-1, -1, -1, -1, -1]
         return model
-
+    '''
     def verify_fit(self):
         N = np.prod(self.Phi[1:4]) - self.Phi[0]*(self.Phi[3]**2) - self.Phi[2]**2 - self.Phi[4]*(self.Phi[1]**2 - 4*self.Phi[0])
         D1 = (self.Phi[1]**2 - 4*self.Phi[0])*(1 + self.Phi[0] - np.sqrt((1 - self.Phi[0])**2 + self.Phi[1]**2))
@@ -277,7 +296,7 @@ class ElliFit():
             cond2 = False
         cond3 = False if (np.any(np.isnan(self.Phi)) or np.any(np.isinf(self.Phi))) else True
         return cond1 and cond2 and cond3 and cond4
-
+    '''
     def fit_error(self, data):
         # General purpose function to find the residual
         # model: xc, yc, a, b, theta
