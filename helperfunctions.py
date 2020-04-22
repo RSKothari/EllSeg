@@ -202,7 +202,7 @@ class my_ellipse():
 
 class ElliFit():
     def __init__(self, **kwargs):
-        self.data = np.array([])
+        self.data = np.array([]) # Nx2
         self.W = np.array([])
         self.Phi = []
         self.pts_lim = 6*2
@@ -259,15 +259,14 @@ class ElliFit():
             model = [-1, -1, -1, -1, -1]
         '''
         try:
-            Phi = self.Phi
-            x0=(Phi[2]-Phi[3]*Phi[1])/((Phi[0])-(Phi[1])^2)
-            y0=(Phi[0]*Phi[3]-Phi[2]*Phi[1])/((Phi[0])-(Phi[1])^2)
-            term2=np.sqrt(((1-Phi[0])^2+4*(Phi[1])^2))
-            term3=(Phi[4]+(y0)^2+(x0^2)*Phi[0]+2*Phi[1])
-            term1=1+Phi[0]
+            x0=(self.Phi[2]-self.Phi[3]*self.Phi[1])/((self.Phi[0])-(self.Phi[1])**2)
+            y0=(self.Phi[0]*self.Phi[3]-self.Phi[2]*self.Phi[1])/((self.Phi[0])-(self.Phi[1])**2)
+            term2=np.sqrt(((1-self.Phi[0])**2+4*(self.Phi[1])**2))
+            term3=(self.Phi[4]+(y0)**2+(x0**2)*self.Phi[0]+2*self.Phi[1])
+            term1=1+self.Phi[0]
             b=(np.sqrt(2*term3/(term1+term2)))
             a=(np.sqrt(2*term3/(term1-term2)))
-            alpha=0.5*np.arctan2(2*Phi[1],1-Phi[0])
+            alpha=0.5*np.arctan2(2*self.Phi[1],1-self.Phi[0])
             model = [x0+xm, y0+ym, a, b, -alpha]
         except:
             print('Inappropriate model generated')
@@ -346,7 +345,7 @@ class ransac():
 def rotation_2d(theta):
     # Return a 2D rotation matrix in the anticlockwise direction
     c, s = np.cos(theta), np.sin(theta)
-    H_rot = np.array([[c, -s, 0], [s, c, 0], [0.0, 0.0, 1]])
+    H_rot = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1]])
     return H_rot
 
 def trans_2d(cx, cy):
