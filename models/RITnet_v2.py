@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from pytorchtools import linStack
-from utils import normPts
+from utils import normPts, regressionModule
 from loss import conf_Loss, get_ptLoss, get_seg2ptLoss, get_segLoss
 
 def getSizes(chz, growth, blks=4):
@@ -185,15 +185,10 @@ class DenseNet2D(nn.Module):
 
         self.enc = DenseNet_encoder(in_c=1, chz=chz, actfunc=actfunc, growth=growth, norm=norm)
         self.dec = DenseNet_decoder(chz=chz, out_c=3, actfunc=actfunc, growth=growth, norm=norm)
+        self.elReg = regressionModule(self.sizes, opChannels=10)
 
-        self.bottleneck_lin = linStack(num_layers=2,
-                                        in_dim=self.sizes['enc']['op'][-1],
-                                        hidden_dim=64,
-                                        out_dim=10,
-                                        bias=True,
-                                        actBool=True,
-                                        dp=0.0)
         self._initialize_weights()
+
 
     def setDatasetInfo(self, numSets=2):
         # Produces a 1 layered MLP which directly maps bottleneck to the DS ID
@@ -222,7 +217,7 @@ class DenseNet2D(nn.Module):
 
         x4, x3, x2, x1, x = self.enc(x)
         latent = torch.mean(x.flatten(start_dim=2), -1) # [B, features]
-        elOut = self.bottleneck_lin(latent)
+        elOut = self.elReg(x)
         op = self.dec(x4, x3, x2, x1, x)
         pred_c = elOut[:, 5:7] # Columns 5 & 6 correspond to pupil center
 

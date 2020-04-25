@@ -1,20 +1,27 @@
 import matplotlib.pyplot as plt
-import numpy as np
-from matplotlib.patches import Ellipse
+import time
+import random
 
-delta = 45.0  # degrees
+ysample = random.sample(xrange(-50, 50), 100)
 
-angles = np.arange(0, 360 + delta, delta)
-ells = [Ellipse((1, 1), 4, 2, a) for a in angles]
+xdata = []
+ydata = []
 
-a = plt.subplot(111, aspect='equal')
+plt.show()
 
-for e in ells[:2]:
-    e.set_clip_box(a.bbox)
-    e.set_alpha(0.1)
-    a.add_artist(e)
+axes = plt.gca()
+axes.set_xlim(0, 100)
+axes.set_ylim(-50, +50)
+line, = axes.plot(xdata, ydata, 'r-')
 
-plt.xlim(-2, 4)
-plt.ylim(-1, 3)
+for i in range(100):
+    xdata.append(i)
+    ydata.append(ysample[i])
+    line.set_xdata(xdata)
+    line.set_ydata(ydata)
+    plt.draw()
+    plt.pause(1e-17)
+    time.sleep(0.1)
 
+# add this if you don't want the window to disappear at the end
 plt.show()

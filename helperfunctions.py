@@ -78,19 +78,24 @@ class my_ellipse():
             Ellipse parameters, [cx, cy, a, b, theta]
 
         '''
-        N = np.prod(self.Phi[1:4]) - self.Phi[0]*(self.Phi[3]**2) - self.Phi[2]**2 - self.Phi[4]*(self.Phi[1]**2 - 4*self.Phi[0])
-        D1 = (self.Phi[1]**2 - 4*self.Phi[0])*(1 + self.Phi[0] - np.sqrt((1 - self.Phi[0])**2 + self.Phi[1]**2))
-        D2 = (self.Phi[1]**2 - 4*self.Phi[0])*(1 + self.Phi[0] + np.sqrt((1 - self.Phi[0])**2 + self.Phi[1]**2))
-        a = 2*np.sqrt(N/D1)
-        b = 2*np.sqrt(N/D2)
-        theta_c = 0.5*np.arctan2(-self.Phi[1], (1 - self.Phi[0]))
-        xc = (self.Phi[1]*self.Phi[3] - 2*self.Phi[2])/(self.Phi[1]**2 - 4*self.Phi[0])
-        yc = (self.Phi[1]*self.Phi[2] - 2*self.Phi[0]*self.Phi[3])/(self.Phi[1]**2 - 4*self.Phi[0])
-        model = [xc + xm, yc + ym, np.sqrt(0.5*a**2), np.sqrt(0.5*b**2), theta_c]
-        if np.any(np.isnan(model)) or np.any(np.isinf(model)):
-            # If there is an inf and nan in the model, ignore.
+        try:
+            x0=(self.Phi[2]-self.Phi[3]*self.Phi[1])/((self.Phi[0])-(self.Phi[1])**2)
+            y0=(self.Phi[0]*self.Phi[3]-self.Phi[2]*self.Phi[1])/((self.Phi[0])-(self.Phi[1])**2)
+            term2=np.sqrt(((1-self.Phi[0])**2+4*(self.Phi[1])**2))
+            term3=(self.Phi[4]+(y0)**2+(x0**2)*self.Phi[0]+2*self.Phi[1])
+            term1=1+self.Phi[0]
+            print(term1, term2, term3)
+            b=(np.sqrt(2*term3/(term1+term2)))
+            a=(np.sqrt(2*term3/(term1-term2)))
+            alpha=0.5*np.arctan2(2*self.Phi[1],1-self.Phi[0])
+            model = [x0+xm, y0+ym, a, b, -alpha]
+        except:
+            print('Inappropriate model generated')
+            model = [np.nan, np.nan, np.nan, np.nan, np.nan]
+        if np.all(np.isreal(model)) and np.all(~np.isnan(model)) and np.all(~np.isinf(model)):
+            model = model
+        else:
             model = [-1, -1, -1, -1, -1]
-        self.param = model
         return model
 
     def recover_theta(self, mat):
@@ -151,7 +156,7 @@ class my_ellipse():
         'equiSlope' - Points along the periphery with tangential slopes [-1:0.5:1)
         'random' - Generate N points randomly across the ellipse
         '''
-        '''
+
         a = self.param[2]
         b = self.param[3]
 
@@ -173,7 +178,7 @@ class my_ellipse():
                 y.append((y1, y2))
             y_r = np.array(list(chain(*y))) + self.param[1]
             x_r = np.array(list(chain(*x))) + self.param[0]
-        '''
+
         if mode == 'equiAngle':
 
             T = 0.5*np.pi*np.array([-1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2])
@@ -239,31 +244,13 @@ class ElliFit():
                 self.Phi = np.matmul(np.linalg.inv(np.matmul(X.T, X)), np.matmul(X.T, Y))
             except:
                 self.Phi = -1*np.ones(5, )
-        '''
-        if self.verify_fit():
-            N = np.prod(self.Phi[1:4]) - self.Phi[0]*(self.Phi[3]**2) - self.Phi[2]**2 - self.Phi[4]*(self.Phi[1]**2 - 4*self.Phi[0])
-            D1 = (self.Phi[1]**2 - 4*self.Phi[0])*(1 + self.Phi[0] - np.sqrt((1 - self.Phi[0])**2 + self.Phi[1]**2))
-            D2 = (self.Phi[1]**2 - 4*self.Phi[0])*(1 + self.Phi[0] + np.sqrt((1 - self.Phi[0])**2 + self.Phi[1]**2))
-            a = 2*np.sqrt(N/D1)
-            b = 2*np.sqrt(N/D2)
-            theta_c = 0.5*np.arctan2(-self.Phi[1], (1 - self.Phi[0]))
-            #theta_c = -0.5*np.arctan2(2*self.Phi[1], 1-self.Phi[0])
-            xc = (self.Phi[1]*self.Phi[3] - 2*self.Phi[2])/(self.Phi[1]**2 - 4*self.Phi[0])
-            yc = (self.Phi[1]*self.Phi[2] - 2*self.Phi[0]*self.Phi[3])/(self.Phi[1]**2 - 4*self.Phi[0])
-            model = [xc + xm, yc + ym, np.sqrt(0.5*a**2), np.sqrt(0.5*b**2), theta_c]
-            if np.any(np.isnan(model)) or np.any(np.isinf(model)):
-                # If there is an inf and nan in the model, ignore.
-                model = [-1, -1, -1, -1, -1]
-
-        else:
-            model = [-1, -1, -1, -1, -1]
-        '''
         try:
             x0=(self.Phi[2]-self.Phi[3]*self.Phi[1])/((self.Phi[0])-(self.Phi[1])**2)
             y0=(self.Phi[0]*self.Phi[3]-self.Phi[2]*self.Phi[1])/((self.Phi[0])-(self.Phi[1])**2)
             term2=np.sqrt(((1-self.Phi[0])**2+4*(self.Phi[1])**2))
-            term3=(self.Phi[4]+(y0)**2+(x0**2)*self.Phi[0]+2*self.Phi[1])
+            term3=(self.Phi[4] + (y0)**2 + (x0**2)*self.Phi[0] + 2*self.Phi[1])
             term1=1+self.Phi[0]
+            print(term1, term2, term3)
             b=(np.sqrt(2*term3/(term1+term2)))
             a=(np.sqrt(2*term3/(term1-term2)))
             alpha=0.5*np.arctan2(2*self.Phi[1],1-self.Phi[0])

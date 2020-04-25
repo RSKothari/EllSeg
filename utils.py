@@ -14,6 +14,7 @@ import tqdm
 import copy
 import torch
 import numpy as np
+import torch.nn as nn
 import torch.nn.functional as F
 
 from torchvision.utils import make_grid
@@ -132,7 +133,7 @@ def getSeg_metrics(y_true, y_pred, cond):
         labels_present = np.unique(y_true[i, ...])
         score_vals = np.empty((3, ))
         score_vals[:] = np.nan
-        if not cond[i, 1]:
+        if not cond:
             score = metrics.jaccard_score(y_true[i, ...].reshape(-1),
                                           y_pred[i, ...].reshape(-1),
                                           labels=labels_present,
@@ -142,7 +143,7 @@ def getSeg_metrics(y_true, y_pred, cond):
                 score_vals[val] = score[j]
         score_list.append(score_vals)
     score_list = np.stack(score_list, axis=0)
-    score_list_clean = score_list[~cond[:, 1], :] # Only select valid entries
+    score_list_clean = score_list[~cond, :] # Only select valid entries
     perClassIOU = np.nanmean(score_list_clean, axis=0) if len(score_list_clean) > 0 else np.nan*np.ones(3, )
     meanIOU = np.nanmean(perClassIOU) if len(score_list_clean) > 0 else np.nan
     return meanIOU, perClassIOU, score_list
@@ -159,7 +160,15 @@ def getPoint_metric(y_true, y_pred, cond, sz, do_unnorm):
     return (np.sum(dist)/np.sum(flag) if np.any(flag) else np.nan,
             dist)
 
-def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, override=False):
+def getAng_metric(y_true, y_pred, cond):
+    # Assumes the incoming angular measurements are in radians
+    cond = cond.astype(np.bool)
+    flag = (~cond).astype(np.float)
+    dist = np.rad2deg(flag*np.abs(y_true - y_pred))
+    return (np.sum(dist)/np.sum(flag) if np.any(flag) else np.nan,
+            dist)
+
+def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, heatmaps=False, override=False, ):
     '''
     Parameters
     ----------
@@ -176,6 +185,8 @@ def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, override=False
         Identified pupil center for plotting.
     cond : numpy array [B, 5]
         A flag array which holds information about what information is present.
+    heatmaps : bool, optional
+        Unless specificed, does not show the heatmaps of predicted points
     override : bool, optional
         An override flag which plots data despite being demarked in the flag
         array. Generally used during testing.
@@ -224,19 +235,20 @@ def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, override=False
             im[rr_i, cc_i, ...] = np.array([0, 0, 255])
             im[rr_p, cc_p, ...] = np.array([255, 0, 0])
 
-            irisMaps = np.mean(hMaps[i, 0, ...], axis=0)
-            pupilMaps = np.mean(hMaps[i, 1, ...], axis=0)
-            irisMaps = np.uint8(255*irisMaps/irisMaps.max())
-            pupilMaps = np.uint8(255*pupilMaps/pupilMaps.max())
+            if heatmaps:
+                irisMaps = np.mean(hMaps[i, 0, ...], axis=0)
+                pupilMaps = np.mean(hMaps[i, 1, ...], axis=0)
+                irisMaps = np.uint8(255*irisMaps/irisMaps.max())
+                pupilMaps = np.uint8(255*pupilMaps/pupilMaps.max())
 
-            im = cv2.addWeighted(im,
-                                0.5,
-                                np.stack([irisMaps, irisMaps, irisMaps], axis=2),
-                                0.5, 0)  # Add Iris to blue
-            im = cv2.addWeighted(im,
-                                0.5,
-                                np.stack([pupilMaps, pupilMaps, pupilMaps], axis=2),
-                                0.5, 0)
+                im = cv2.addWeighted(im,
+                                    0.5,
+                                    np.stack([irisMaps, irisMaps, irisMaps], axis=2),
+                                    0.5, 0)  # Add Iris to blue
+                im = cv2.addWeighted(im,
+                                    0.5,
+                                    np.stack([pupilMaps, pupilMaps, pupilMaps], axis=2),
+                                    0.5, 0)
 
         if (not cond[i, 0]) or override:
             # If pupil center exists
@@ -293,6 +305,7 @@ def lossandaccuracy(args, loader, model, alpha, device):
     ious = []
     pup_c_lat_dists = []
     pup_c_seg_dists = []
+    pup_ang_lat = []
     model.eval()
     latent_codes = []
     with torch.no_grad():
@@ -311,7 +324,7 @@ def lossandaccuracy(args, loader, model, alpha, device):
                             cond.to(device).to(args.prec),
                             imInfo[:, 2].to(device).to(torch.long), # Send DS #
                             alpha)
-            output, op_hmaps, elOut, latent, pred_center, seg_center, eleFit, loss = op_tup
+            output, elOut, latent, pred_center, seg_center, loss = op_tup
             latent_codes.append(latent.detach().cpu())
             loss = loss.mean() if args.useMultiGPU else loss
             epoch_loss.append(loss.item())
@@ -327,16 +340,28 @@ def lossandaccuracy(args, loader, model, alpha, device):
                                          cond[:, 0].numpy(),
                                          img.shape[2:],
                                          True)[0] # Unnormalizes the points
-            pup_c_lat_dists.append(ptDist)
-            pup_c_seg_dists.append(ptDist_seg)
+
+            angDist_reg = getAng_metric(elNorm[:, 0, :].numpy(),
+                                        elOut[:, 4].detach().cpu().numpy(),
+                                        cond[:, 1].numpy())
 
             predict = get_predictions(output)
             iou = getSeg_metrics(labels.numpy(),
                                  predict.numpy(),
                                  cond.numpy())[1]
+
+            pup_c_lat_dists.append(ptDist)
+            pup_c_seg_dists.append(ptDist_seg)
+            pup_ang_lat.append(angDist_reg)
             ious.append(iou)
     ious = np.stack(ious, axis=0)
-    return np.mean(epoch_loss), np.nanmean(ious, 0), pup_c_lat_dists, pup_c_seg_dists, latent_codes
+
+    return (np.mean(epoch_loss),
+            np.nanmean(ious, 0),
+            pup_c_lat_dists,
+            pup_c_seg_dists,
+            pup_ang_lat,
+            latent_codes)
 
 def points_to_heatmap(pts, std, res):
     # Given image resolution and variance, generate synthetic Gaussians around
@@ -460,3 +485,37 @@ def spatial_softargmax_2d(input: torch.Tensor, normalized_coordinates: bool = Tr
     output: torch.Tensor = torch.cat([expected_x, expected_y], -1)
 
     return output.view(batch_size, channels, 2)  # BxNx2
+
+class regressionModule(torch.nn.Module):
+    def __init__(self, sizes, opChannels=10):
+        super(regressionModule, self).__init__()
+        inChannels = sizes['enc']['op'][-1]
+        self.max_pool = nn.AvgPool2d(kernel_size=2)
+
+        self.c1 = nn.Conv2d(in_channels=inChannels,
+                            out_channels=inChannels,
+                            bias=True,
+                            kernel_size=3)
+
+        self.c2 = nn.Conv2d(in_channels=inChannels,
+                            out_channels=inChannels,
+                            bias=True,
+                            kernel_size=3)
+
+        self.c3 = nn.Conv2d(in_channels=inChannels,
+                            out_channels=16,
+                            kernel_size=1,
+                            bias=False)
+
+        self.l1 = nn.Linear(16*5*7, 512, bias=True)
+        self.l2 = nn.Linear(512, 10, bias=True)
+    def forward(self, x):
+        B = x.shape[0]
+        # x: [B, 192, H/16, W/16]
+        x = F.pad(x, (0,0,0,1)) # [B, 192, 16, 20]
+        x = self.max_pool(F.leaky_relu(self.c1(x))) # [B, 192, 7, 9]
+        x = self.c3(F.leaky_relu(self.c2(x))) # [B, 16, 5, 7]
+        x = x.reshape(B, -1)
+        x = self.l1(x)
+        x = self.l2(x)
+        return x

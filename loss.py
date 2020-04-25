@@ -12,6 +12,7 @@ import torch.nn.functional as F
 from utils import create_meshgrid, ElliFit
 from utils import normPts, spatial_softargmax_2d, spatial_softmax_2d
 
+'''
 def get_allLoss(op,
                 op_hmaps,
                 elOut, # Network outputs
@@ -26,13 +27,7 @@ def get_allLoss(op,
                 cond,
                 ID,
                 alpha):
-    '''
-    op: Segmentation map output [B, 3, H, W]
-    op_hmaps: Output heatmaps [B, 16, H, W]
-    hMaps: Groundtruth heatmap [B, 16, H, W]
-    elPts: Points along pupil or iris ellipse [B, 2, 16, 2]
-    elPhi: Phi values from normalized ellipse equation
-    '''
+
     B, C, H, W = op.shape
     pred_c = elOut[:, 5:7]
 

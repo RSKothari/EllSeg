@@ -61,7 +61,7 @@ data['I'] = np.stack(data['I'], axis=0)
 data['xPts'] = np.stack(data['xPts'], axis=0)
 data['yPts'] = np.stack(data['yPts'], axis=0)
 
-I = sketch(0, data)
+I = sketch(9, data)
 fig = plt.figure()
 grid = ImageGrid(fig, 111, nrows_ncols=(n_pts, n_pts), axes_pad=0.6)
 

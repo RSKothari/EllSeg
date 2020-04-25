@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 
 from helperfunctions import my_ellipse, ElliFit
 from matplotlib.patches import Ellipse
+from skimage.draw import ellipse
 
 def verifyMat(M, pts):
     dist = 0
@@ -20,13 +21,18 @@ def verifyMat(M, pts):
         dist += pt.T.dot(M).dot(pt)
     return dist
 
-cx = 120
-cy = 140
-a = 90
-b = 120
+# Ellipse values defined in eucid coordinates (Y axis up)
+cx = 180
+cy = 180
+a = 120
+b = 60
 deg = 30
 
-H = np.array([[2/320, 0, -1], [0, 2/320, -1], [0, 0, 1]])
+[rr, cc] = ellipse(cy, cx, b, a, rotation=np.deg2rad(-deg))
+I = np.zeros((400, 400))
+I[rr, cc] = 1
+
+H = np.array([[2/20, 0, -1], [0, 2/20, -1], [0, 0, 1]])
 
 e1 = np.array([cx, cy, a, b, np.deg2rad(deg)])
 p1 = my_ellipse(e1)
@@ -48,10 +54,14 @@ fit2 = ElliFit(**{'data': np.stack(pts2, 1)})
 print('Fit ellipse: {}'.format(fit1.model))
 print('Norm fit ellipse: {}'.format(fit2.model))
 
-el1 = Ellipse((cx, cy), 2*a, 2*b, angle=deg)
+el = Ellipse((cx, cy), 2*a, 2*b, angle=deg)
+el.set_facecolor('None')
+el.set_edgecolor((1.0, 0.0, 0.0))
+
 fig, ax = plt.subplots(1)
+ax.imshow(I)
 ax.scatter(pts1[0], pts1[1])
-ax.add_patch(el1)
+ax.add_patch(el)
 plt.show(block=False)
 
 # Points to matrix fit verification

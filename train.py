@@ -16,7 +16,7 @@ from helperfunctions import mypause, linVal
 from pytorchtools import EarlyStopping, load_from_file
 from utils import get_nparams, Logger, get_predictions, lossandaccuracy
 from utils import getSeg_metrics, getPoint_metric, generateImageGrid, unnormPts
-from utils import points_to_heatmap
+from utils import points_to_heatmap, getAng_metric
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
@@ -140,6 +140,8 @@ if __name__ == '__main__':
         ious = []
         pup_c_lat_dists = []
         pup_c_seg_dists = []
+        pup_ang_lat = []
+
         model.train()
         alpha = linVal(epoch, (0, args.epochs), (0, 1), 0)
 
@@ -164,18 +166,19 @@ if __name__ == '__main__':
                 while not model.toggle:
                     # Keep forward passing until secondary is finetuned
                     opt_disent.zero_grad()
-                    output, _, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
-                                                                      labels.to(device).long(),
-                                                                      pupil_center.to(device).to(args.prec),
-                                                                      hMaps.to(device).to(args.prec),
-                                                                      elPts.to(device).to(args.prec),
-                                                                      elNorm.to(device).to(args.prec),
-                                                                      elPhi.to(device).to(args.prec),
-                                                                      spatialWeights.to(device).to(args.prec),
-                                                                      distMap.to(device).to(args.prec),
-                                                                      cond.to(device).to(args.prec),
-                                                                      imInfo[:, 2].to(device).to(torch.long), # Send DS #
-                                                                      alpha)
+                    out_tup = model(img.to(device).to(args.prec),
+                                    labels.to(device).long(),
+                                    pupil_center.to(device).to(args.prec),
+                                    hMaps.to(device).to(args.prec),
+                                    elPts.to(device).to(args.prec),
+                                    elNorm.to(device).to(args.prec),
+                                    elPhi.to(device).to(args.prec),
+                                    spatialWeights.to(device).to(args.prec),
+                                    distMap.to(device).to(args.prec),
+                                    cond.to(device).to(args.prec),
+                                    imInfo[:, 2].to(device).to(torch.long), # Send DS #
+                                    alpha)
+                    output, elOut, _, pred_center, seg_center, loss = out_tup
                     loss = loss.mean() if args.useMultiGPU else loss
                     loss.backward()
                     opt_disent.step()
@@ -202,7 +205,7 @@ if __name__ == '__main__':
                             cond.to(device).to(args.prec),
                             imInfo[:, 2].to(device).to(torch.long), # Send DS #
                             alpha)
-            output, op_hmaps, elOut, _, pred_center, seg_center, eleFit, loss = out_tup
+            output, elOut, _, pred_center, seg_center, loss = out_tup
 
             loss = loss.mean() if args.useMultiGPU else loss
             loss.backward()
@@ -212,7 +215,7 @@ if __name__ == '__main__':
             predict = get_predictions(output)
             iou = getSeg_metrics(labels.numpy(),
                                  predict.numpy(),
-                                 cond.numpy())[1]
+                                 cond[:, 1].numpy())[1]
             ptDist = getPoint_metric(pupil_center.numpy(),
                                      pred_center.detach().cpu().numpy(),
                                      cond[:,0].numpy(),
@@ -223,8 +226,14 @@ if __name__ == '__main__':
                                          cond[:,0].numpy(),
                                          img.shape[2:],
                                          True)[0] # Unnormalizes the points
+            angDist_reg = getAng_metric(elNorm[:, 0, :].numpy(),
+                                        elOut[:, 4].detach().cpu().numpy(),
+                                        cond[:, 1].numpy())
+
+            # Append scores to running metric
             pup_c_lat_dists.append(ptDist)
             pup_c_seg_dists.append(ptDist_seg)
+            pup_ang_lat.append(angDist_reg)
             ious.append(iou)
 
             pup_c = unnormPts(pred_center.detach().cpu().numpy(),
@@ -237,7 +246,8 @@ if __name__ == '__main__':
                                       elOut.detach().cpu().numpy().reshape(-1, 2, 5),
                                       pup_c,
                                       cond.numpy(),
-                                      override=True)
+                                      override=True,
+                                      heatmaps=False)
 
             if args.disp:
                 if (epoch == startEp) and (bt == 0):
@@ -263,12 +273,19 @@ if __name__ == '__main__':
                                              'std':np.nanstd(pup_c_lat_dists)}, epoch)
         writer.add_scalars('train/pup_s_c', {'mu':np.nanmean(pup_c_seg_dists),
                                              'std':np.nanstd(pup_c_seg_dists)}, epoch)
+        writer.add_scalars('train/pup_ang', {'mu':np.nanmean(pup_ang_lat),
+                                             'std':np.nanstd(pup_ang_lat)}, epoch)
         writer.add_scalars('train/iou', {'mIOU':np.mean(ious),
                                          'bG':ious[0],
                                          'iris':ious[1],
                                          'pupil':ious[2]}, epoch)
 
-        lossvalid, ious, pup_c_lat_dists, pup_c_seg_dists, latent_codes = lossandaccuracy(args, validloader, model, alpha, device)
+        out_tup = lossandaccuracy(args, # Training arguments
+                                  validloader, # Validation loader
+                                  model, # Model
+                                  alpha, # Alpha value to measure loss
+                                  device)
+        lossvalid, ious, pup_c_lat_dists, pup_c_seg_dists, pup_ang_lat, latent_codes = out_tup
 
         # Add valid info to tensorboard
         writer.add_scalar('valid/loss', lossvalid, epoch)
@@ -276,19 +293,23 @@ if __name__ == '__main__':
                                              'std':np.nanstd(pup_c_lat_dists)}, epoch)
         writer.add_scalars('valid/pup_s_c', {'mu':np.nanmean(pup_c_seg_dists),
                                              'std':np.nanstd(pup_c_seg_dists)}, epoch)
+        writer.add_scalars('valid/pup_ang', {'mu':np.nanmean(pup_ang_lat),
+                                             'std':np.nanstd(pup_ang_lat)}, epoch)
         writer.add_scalars('valid/iou', {'mIOU':np.mean(ious),
                                          'bG':ious[0],
                                          'iris':ious[1],
                                          'pupil':ious[2]}, epoch)
         writer.add_image('train/op', dispI, epoch)
+
         if epoch%embed_log == 0:
             print('Saving embeddings ...')
             writer.add_embedding(torch.cat(latent_codes, 0),
                                  metadata=validObj.imList[:len(latent_codes)*args.batchsize, 2],
                                  global_step=epoch)
 
-        for name, param in model.named_parameters():
-            writer.add_histogram(name, param.clone().cpu().data.numpy(), epoch)
+        # Save out histogram of weights and biases - generally unrequired
+        # for name, param in model.named_parameters():
+        #     writer.add_histogram(name, param.clone().cpu().data.numpy(), epoch)
 
         f = 'Epoch:{}, Valid Loss: {:.3f}, mIoU: {}'
         logger.write(f.format(epoch, lossvalid, np.mean(ious)))
