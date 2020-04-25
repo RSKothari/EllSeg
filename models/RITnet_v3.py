@@ -9,8 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from pytorchtools import linStack
-from utils import normPts
-from loss import conf_Loss, get_ptLoss, get_seg2ptLoss, get_segLoss
+from loss import get_allLoss, conf_Loss
 
 def getSizes(chz, growth, blks=4):
     # This function does not calculate the size requirements for head and tail
@@ -185,6 +184,7 @@ class DenseNet2D(nn.Module):
 
         self.enc = DenseNet_encoder(in_c=1, chz=chz, actfunc=actfunc, growth=growth, norm=norm)
         self.dec = DenseNet_decoder(chz=chz, out_c=3, actfunc=actfunc, growth=growth, norm=norm)
+        self.dec_el = DenseNet_decoder(chz=chz, out_c=16, actfunc=actfunc, growth=growth, norm=norm)
 
         self.bottleneck_lin = linStack(num_layers=2,
                                         in_dim=self.sizes['enc']['op'][-1],
@@ -196,7 +196,7 @@ class DenseNet2D(nn.Module):
         self._initialize_weights()
 
     def setDatasetInfo(self, numSets=2):
-        # Produces a 1 layered MLP which directly maps bottleneck to the DS ID
+        # Produces a 1 layered MLP which directly maps
         self.numSets = numSets
         self.dsIdentify_lin = linStack(num_layers=2,
                                        in_dim=self.sizes['enc']['op'][-1],
@@ -214,31 +214,34 @@ class DenseNet2D(nn.Module):
                 elPts, # Ellipse points [B, 2, 8, 2]
                 elNorm, # Normalized ellipse parameters [B, 2, 5]
                 elPhi, # Normalized ellipse phi values [B, 2, 5]
-                spatWts, # Spatial weights for segmentation loss (boundary loss) [B, H, W]
-                distMap, # Distance map for segmentation loss (surface loss) [B, 3, H, W]
+                spatWts, # Spatial weights for segmentation loss (boundary loss)
+                distMap, # Distance map for segmentation loss (surface loss)
                 cond, # A condition array for each entry which marks its status [B, 4]
                 ID, # A Tensor containing information about the dataset or subset a entry
-                alpha): # Alpha score for various loss curicullum
+                alpha): # Alpha score for various loss curicullum,
 
         x4, x3, x2, x1, x = self.enc(x)
         latent = torch.mean(x.flatten(start_dim=2), -1) # [B, features]
         elOut = self.bottleneck_lin(latent)
         op = self.dec(x4, x3, x2, x1, x)
+        op_hmaps = self.dec_el(x4, x3, x2, x1, x) # [B, 16, H, W]
         pred_c = elOut[:, 5:7] # Columns 5 & 6 correspond to pupil center
 
         op_tup = get_allLoss(op, # Output segmentation map
-                                elOut, # Predicted Ellipse parameters
-                                target, # Segmentation targets
-                                pupil_center, # Pupil center
-                                elPts, # Normalized ellipse points
-                                elNorm, # Normalized ellipse equation
-                                elPhi, # Normalized ellipse Phi
-                                spatWts, # Spatial weights
-                                distMap, # Distance maps
-                                cond, # Condition
-                                ID, # Image and dataset ID
-                                alpha)
-        loss, pred_c_seg = op_tup
+                            op_hmaps, # Predicted heatmap
+                            elOut, # Predicted Ellipse parameters
+                            target, # Segmentation targets
+                            pupil_center, # Pupil center
+                            hMaps, # Heatmaps
+                            elPts, # Normalized ellipse points
+                            elNorm, # Normalized ellipse equation
+                            elPhi, # Normalized ellipse Phi
+                            spatWts, # Spatial weights
+                            distMap, # Distance maps
+                            cond, # Condition
+                            ID, # Image and dataset ID
+                            alpha)
+        loss, pred_c_seg, op_hmaps, eleFits = op_tup
 
         if self.disentangle:
             pred_ds = self.dsIdentify_lin(latent)
@@ -257,7 +260,7 @@ class DenseNet2D(nn.Module):
             # No disentanglement, proceed regularly
             if self.selfCorr:
                 loss = loss + F.l1_loss(pred_c_seg, pred_c)
-        return op, elOut, latent, pred_c, pred_c_seg, loss.unsqueeze(0)
+        return op, op_hmaps, elOut, latent, pred_c, pred_c_seg, eleFits, loss.unsqueeze(0)
 
     def _initialize_weights(self):
         for m in self.modules():
@@ -273,41 +276,3 @@ class DenseNet2D(nn.Module):
                 n = m.weight.size(1)
                 m.weight.data.normal_(0, 0.01)
                 m.bias.data.zero_()
-
-def get_allLoss(op,
-                elOut, # Network outputs
-                target, # Segmentation targets
-                pupil_center, # Pupil center
-                elPts, # Ellipse points
-                elNorm,
-                elPhi,
-                spatWts,
-                distMap,
-                cond,
-                ID,
-                alpha):
-    '''
-    op: Segmentation map output [B, 3, H, W]
-    op_hmaps: Output heatmaps [B, 16, H, W]
-    hMaps: Groundtruth heatmap [B, 16, H, W]
-    elPts: Points along pupil or iris ellipse [B, 2, 16, 2]
-    elPhi: Phi values from normalized ellipse equation
-    '''
-    B, C, H, W = op.shape
-    pred_c = elOut[:, 5:7]
-
-    # Segmentation loss
-    l_seg = get_segLoss(op, target, spatWts, distMap, cond[:, 1], alpha)
-
-    # Bottleneck Ellipse center loss
-    l_pt = get_ptLoss(pred_c, normPts(pupil_center, target.shape[1:]), cond[:, 0])
-
-    # Segmentation to Ellipse center loss
-    l_seg2pt, pred_c_seg = get_seg2ptLoss(op[:, 2, ...],
-                                          normPts(pupil_center,
-                                                  target.shape[1:]), 1)
-
-    # Compute ellipse losses - F1 loss for valid samples
-    l_ellipse = get_ptLoss(elOut, elNorm.view(-1, 10), cond[:, 1])
-
-    return (l_ellipse + l_seg2pt + l_pt + 20*l_seg, pred_c_seg)

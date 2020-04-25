@@ -151,7 +151,7 @@ class my_ellipse():
         'equiSlope' - Points along the periphery with tangential slopes [-1:0.5:1)
         'random' - Generate N points randomly across the ellipse
         '''
-
+        '''
         a = self.param[2]
         b = self.param[3]
 
@@ -173,14 +173,14 @@ class my_ellipse():
                 y.append((y1, y2))
             y_r = np.array(list(chain(*y))) + self.param[1]
             x_r = np.array(list(chain(*x))) + self.param[0]
-
-        elif mode == 'equiAngle':
+        '''
+        if mode == 'equiAngle':
 
             T = 0.5*np.pi*np.array([-1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2])
             N = len(T)
             x = self.param[2]*np.cos(T)
             y = self.param[3]*np.sin(T)
-            H_rot = rotation_2d(-self.param[-1])
+            H_rot = rotation_2d(self.param[-1])
             X1 = H_rot.dot(np.stack([x, y, np.ones(N, )], axis=0))
 
             x_r = X1[0, :] + self.param[0]
@@ -190,7 +190,7 @@ class my_ellipse():
             T = 2*np.pi*(np.random.rand(N, ) - 0.5)
             x = self.param[2]*np.cos(T)
             y = self.param[3]*np.sin(T)
-            H_rot = rotation_2d(-self.param[-1])
+            H_rot = rotation_2d(self.param[-1])
             X1 = H_rot.dot(np.stack([x, y, np.ones(N, )], axis=0))
             x_r = X1[0, :] + self.param[0]
             y_r = X1[1, :] + self.param[1]

@@ -86,7 +86,7 @@ def get_allLoss(op,
 
     # Compute ellipse losses - F1 loss for valid samples
     l_ellipse = get_ptLoss(elOut, elNorm.view(-1, 10), cond[:, 1])
-    '''
+
     print('l_map: {}. l_lmrks: {}. l_ellipse: {}. l_seg2pt: {}. l_pt: {}. l_seg: {}'.format(
         l_map.item(),
         l_lmrks.item(),
@@ -94,7 +94,6 @@ def get_allLoss(op,
         l_seg2pt.item(),
         l_pt.item(),
         l_seg.item()))
-    '''
 
     return (l_map + l_lmrks + l_fits + l_ellipse + l_seg2pt + l_pt + 20*l_seg,
             pred_c_seg,
@@ -102,6 +101,7 @@ def get_allLoss(op,
                          hmaps_pup], dim=1),
             torch.stack([iris_fit,
                          pupil_fit], dim=1))
+'''
 
 def get_seg2ptLoss(op, gtPts, temperature):
     # Custom function to find the pupilary center of mass to detected pupil

@@ -94,7 +94,7 @@ if __name__ == '__main__':
         # Let the model know how many datasets it must expect
         print('Total # of datasets found: {}'.format(np.unique(trainObj.imList[:, 2]).size))
         model.setDatasetInfo(np.unique(trainObj.imList[:, 2]).size)
-        opt_disent = torch.optim.Adam(model.dsIdentify_lin.parameters(), lr=0.1*args.lr)
+        opt_disent = torch.optim.Adam(model.dsIdentify_lin.parameters(), lr=1*args.lr)
 
     nparams = get_nparams(model)
     print('Total number of trainable parameters: {}\n'.format(nparams))
@@ -151,9 +151,7 @@ if __name__ == '__main__':
             optimizer.zero_grad()
 
             # Disentanglement procedure. Toggle should always be False upon entry.
-            '''
             if args.disentangle:
-                opt_disent.zero_grad()
                 for name, param in model.named_parameters():
                     # Freeze unrequired weights
                     if 'dsIdentify_lin' not in name:
@@ -165,6 +163,7 @@ if __name__ == '__main__':
                 val = 100 # Random large value
                 while not model.toggle:
                     # Keep forward passing until secondary is finetuned
+                    opt_disent.zero_grad()
                     output, _, pred_center, seg_center, loss = model(img.to(device).to(args.prec),
                                                                       labels.to(device).long(),
                                                                       pupil_center.to(device).to(args.prec),
@@ -189,7 +188,6 @@ if __name__ == '__main__':
                 # Switch the parameters which requires gradients
                 for name, param in model.named_parameters():
                     param.requires_grad = False if 'dsIdentify_lin' in name else True
-                '''
 
             model.toggle = True # This must always be true to optimize primary + conf loss
             out_tup = model(img.to(device).to(args.prec),

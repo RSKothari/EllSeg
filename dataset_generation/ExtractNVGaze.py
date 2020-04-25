@@ -178,7 +178,7 @@ def quantizeMask(wSkin_mask, I):
 
 for fName in list_ds:
     ds_name = 'NVGaze'+'_'+fName+'_'+str(ds_num)
-    
+
     # Ignore the first row and column.
     # Columns: [index, p_x, p_y]
     ZipObj = zipfile.ZipFile(os.path.join(PATH_DIR, fName, 'footage_image_data.zip'))
@@ -189,7 +189,7 @@ for fName in list_ds:
         fig, plts = plt.subplots(1,1)
 
     Data, keydict = generateEmptyStorage(name='NVGaze', subset=fName)
-       
+
     fr_num = 0
 
     for boo in imList[:500]:
@@ -231,7 +231,7 @@ for fName in list_ds:
         pupil_fit_error = my_ellipse(model_pupil.model).verify(temp_pts)
 
         pupil_loc = model_pupil.model[:2]
-        
+
         temp = 255*((mask_noSkin == 2) | (mask_noSkin == 3))
         edge = cv2.Canny(temp.astype(np.uint8), 10, 150)+ cv2.Canny((255-temp).astype(np.uint8), 10, 150)
         r, c = np.where(edge)
@@ -255,7 +255,7 @@ for fName in list_ds:
                 cL = Ellipse(tuple(model_iris.model[0:2]),
                                    2*model_iris.model[2],
                                    2*model_iris.model[3],
-                                   np.rad2deg(model_iris.model[4]))
+                                   np.rad2deg(model_iris.model[-1]))
                 cE.set_facecolor('None')
                 cE.set_edgecolor((1.0, 0.0, 0.0))
                 cL.set_facecolor('None')
