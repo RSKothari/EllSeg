@@ -19,7 +19,7 @@ class my_ellipse():
             self.param = param
             self.mat = self.param2mat(self.param)
             self.quad = self.mat2quad(self.mat)
-            self.Phi = self.recover_Phi()
+            #self.Phi = self.recover_Phi()
 
     def param2mat(self, param):
         cx, cy, a, b, theta = tuple(param)
@@ -250,7 +250,6 @@ class ElliFit():
             term2=np.sqrt(((1-self.Phi[0])**2+4*(self.Phi[1])**2))
             term3=(self.Phi[4] + (y0)**2 + (x0**2)*self.Phi[0] + 2*self.Phi[1])
             term1=1+self.Phi[0]
-            print(term1, term2, term3)
             b=(np.sqrt(2*term3/(term1+term2)))
             a=(np.sqrt(2*term3/(term1-term2)))
             alpha=0.5*np.arctan2(2*self.Phi[1],1-self.Phi[0])
@@ -263,26 +262,7 @@ class ElliFit():
         else:
             model = [-1, -1, -1, -1, -1]
         return model
-    '''
-    def verify_fit(self):
-        N = np.prod(self.Phi[1:4]) - self.Phi[0]*(self.Phi[3]**2) - self.Phi[2]**2 - self.Phi[4]*(self.Phi[1]**2 - 4*self.Phi[0])
-        D1 = (self.Phi[1]**2 - 4*self.Phi[0])*(1 + self.Phi[0] - np.sqrt((1 - self.Phi[0])**2 + self.Phi[1]**2))
-        D2 = (self.Phi[1]**2 - 4*self.Phi[0])*(1 + self.Phi[0] + np.sqrt((1 - self.Phi[0])**2 + self.Phi[1]**2))
 
-        cond4 = (N/D1 > 0) & (N/D2 > 0)
-
-        cond1 = self.Phi[0] > 0
-        val1 = np.prod(self.Phi[1:4])
-        val2 = self.Phi[0]*self.Phi[-2]**2 + self.Phi[2]**2
-        if (self.Phi[-1] > 0) and (val1 > val2):
-            cond2 = True
-        elif (self.Phi[-1] < 0) and (val1 < val2):
-            cond2 = True
-        else:
-            cond2 = False
-        cond3 = False if (np.any(np.isnan(self.Phi)) or np.any(np.isinf(self.Phi))) else True
-        return cond1 and cond2 and cond3 and cond4
-    '''
     def fit_error(self, data):
         # General purpose function to find the residual
         # model: xc, yc, a, b, theta
@@ -510,21 +490,18 @@ def get_ellipse_info(param, H, cond):
         Normalizing matrix which converts ellipse to normalized coordinates
     Returns
     -------
-    normPhi: Normalized Phi values
     normParam: Normalized Ellipse parameters
     elPts: Points along ellipse periphery
     '''
     if not cond:
         norm_param = my_ellipse(param).transform(H)[0][:-1] # We don't want the area
         elPts = my_ellipse(norm_param).generatePoints(50, 'equiAngle') # Regular points
-        elPhi = my_ellipse(norm_param).recover_Phi() # Normalized Phi value
         elPts = np.stack(elPts, axis=1)
     else:
         # Ellipse does not exist
         norm_param = -np.ones((5, ))
         elPts = -np.ones((8, 2))
-        elPhi = -np.ones((5, ))
-    return elPhi, elPts, norm_param
+    return elPts, norm_param
 
 # Data extraction helpers
 

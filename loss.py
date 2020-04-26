@@ -123,7 +123,7 @@ def get_segLoss(op, target, spatWts, distMap, cond, alpha):
     B = op.shape[0]
     loss_seg = []
     for i in range(0, B):
-        if cond[i, 1] == 0:
+        if cond[i] == 0:
             # Valid mask exists
             l_sl = SurfaceLoss(op[i, ...].unsqueeze(0), distMap[i, ...].unsqueeze(0))
             l_cE = wCE(op[i, ...], target[i, ...], spatWts[i, ...])
@@ -132,7 +132,7 @@ def get_segLoss(op, target, spatWts, distMap, cond, alpha):
                              F.softmax)
             loss_seg.append(alpha*l_sl + (1-alpha)*l_gD + l_cE)
     if len(loss_seg) > 0:
-        return torch.sum(torch.stack(loss_seg))/torch.sum(1-cond[:, 1])
+        return torch.sum(torch.stack(loss_seg))/torch.sum(1-cond)
     else:
         return 0.0
 

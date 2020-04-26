@@ -137,16 +137,14 @@ class DataLoader_riteyes(Dataset):
 
         # Generate pupil and iris information
         H = np.array([[2/img.shape[2], 0, -1], [0, 2/img.shape[1], -1], [0, 0, 1]])
-        iris_phi, iris_pts, iris_norm = get_ellipse_info(elParam[0], H, cond[3])
-        pupil_phi, pupil_pts, pupil_norm = get_ellipse_info(elParam[1], H, cond[2])
+        iris_pts, iris_norm = get_ellipse_info(elParam[0], H, cond[3])
+        pupil_pts, pupil_norm = get_ellipse_info(elParam[1], H, cond[2])
 
-        elPhi = np.stack([iris_phi, pupil_phi], axis=0) # Respect iris first policy
         elPts = np.stack([iris_pts, pupil_pts], axis=0) # Respect iris first policy
         elNorm = np.stack([iris_norm, pupil_norm], axis=0) # Respect iris first policy
         imInfo = torch.from_numpy(imInfo)
 
-
-        return (img, label, spatialWeights, distMap, pupil_center, elPhi, elPts, elNorm, cond, imInfo)
+        return (img, label, spatialWeights, distMap, pupil_center, elPts, elNorm, cond, imInfo)
 
     def readImage(self, idx):
         '''

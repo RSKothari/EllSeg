@@ -208,7 +208,6 @@ class DenseNet2D(nn.Module):
                 hMaps, # Heatmaps for iris and pupil landmarks [B, 2, 8, H, W]
                 elPts, # Ellipse points [B, 2, 8, 2]
                 elNorm, # Normalized ellipse parameters [B, 2, 5]
-                elPhi, # Normalized ellipse phi values [B, 2, 5]
                 spatWts, # Spatial weights for segmentation loss (boundary loss) [B, H, W]
                 distMap, # Distance map for segmentation loss (surface loss) [B, 3, H, W]
                 cond, # A condition array for each entry which marks its status [B, 4]
@@ -227,7 +226,6 @@ class DenseNet2D(nn.Module):
                                 pupil_center, # Pupil center
                                 elPts, # Normalized ellipse points
                                 elNorm, # Normalized ellipse equation
-                                elPhi, # Normalized ellipse Phi
                                 spatWts, # Spatial weights
                                 distMap, # Distance maps
                                 cond, # Condition
@@ -275,7 +273,6 @@ def get_allLoss(op,
                 pupil_center, # Pupil center
                 elPts, # Ellipse points
                 elNorm,
-                elPhi,
                 spatWts,
                 distMap,
                 cond,

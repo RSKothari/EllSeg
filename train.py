@@ -146,7 +146,7 @@ if __name__ == '__main__':
         alpha = linVal(epoch, (0, args.epochs), (0, 1), 0)
 
         for bt, batchdata in enumerate(trainloader):
-            img, labels, spatialWeights, distMap, pupil_center, elPhi, elPts, elNorm, cond, imInfo = batchdata
+            img, labels, spatialWeights, distMap, pupil_center, elPts, elNorm, cond, imInfo = batchdata
             hMaps = points_to_heatmap(elPts, 2, img.shape[2:])
 
             model.toggle = False
@@ -172,7 +172,6 @@ if __name__ == '__main__':
                                     hMaps.to(device).to(args.prec),
                                     elPts.to(device).to(args.prec),
                                     elNorm.to(device).to(args.prec),
-                                    elPhi.to(device).to(args.prec),
                                     spatialWeights.to(device).to(args.prec),
                                     distMap.to(device).to(args.prec),
                                     cond.to(device).to(args.prec),
@@ -199,7 +198,6 @@ if __name__ == '__main__':
                             hMaps.to(device).to(args.prec),
                             elPts.to(device).to(args.prec),
                             elNorm.to(device).to(args.prec),
-                            elPhi.to(device).to(args.prec),
                             spatialWeights.to(device).to(args.prec),
                             distMap.to(device).to(args.prec),
                             cond.to(device).to(args.prec),
@@ -226,9 +224,9 @@ if __name__ == '__main__':
                                          cond[:,0].numpy(),
                                          img.shape[2:],
                                          True)[0] # Unnormalizes the points
-            angDist_reg = getAng_metric(elNorm[:, 0, :].numpy(),
+            angDist_reg = getAng_metric(elNorm[:, 1, 4].numpy(),
                                         elOut[:, 4].detach().cpu().numpy(),
-                                        cond[:, 1].numpy())
+                                        cond[:, 1].numpy())[0]
 
             # Append scores to running metric
             pup_c_lat_dists.append(ptDist)

@@ -133,7 +133,7 @@ def getSeg_metrics(y_true, y_pred, cond):
         labels_present = np.unique(y_true[i, ...])
         score_vals = np.empty((3, ))
         score_vals[:] = np.nan
-        if not cond:
+        if not cond[i]:
             score = metrics.jaccard_score(y_true[i, ...].reshape(-1),
                                           y_pred[i, ...].reshape(-1),
                                           labels=labels_present,
@@ -310,7 +310,7 @@ def lossandaccuracy(args, loader, model, alpha, device):
     latent_codes = []
     with torch.no_grad():
         for bt, batchdata in enumerate(tqdm.tqdm(loader)):
-            img, labels, spatialWeights, distMap, pupil_center, elPhi, elPts, elNorm, cond, imInfo = batchdata
+            img, labels, spatialWeights, distMap, pupil_center, elPts, elNorm, cond, imInfo = batchdata
             hMaps = points_to_heatmap(elPts, 2, img.shape[2:])
             op_tup = model(img.to(device).to(args.prec),
                             labels.to(device).long(),
@@ -318,7 +318,6 @@ def lossandaccuracy(args, loader, model, alpha, device):
                             hMaps.to(device).to(args.prec),
                             elPts.to(device).to(args.prec),
                             elNorm.to(device).to(args.prec),
-                            elPhi.to(device).to(args.prec),
                             spatialWeights.to(device).to(args.prec),
                             distMap.to(device).to(args.prec),
                             cond.to(device).to(args.prec),
@@ -343,7 +342,7 @@ def lossandaccuracy(args, loader, model, alpha, device):
 
             angDist_reg = getAng_metric(elNorm[:, 0, :].numpy(),
                                         elOut[:, 4].detach().cpu().numpy(),
-                                        cond[:, 1].numpy())
+                                        cond[:, 1].numpy())[0]
 
             predict = get_predictions(output)
             iou = getSeg_metrics(labels.numpy(),
