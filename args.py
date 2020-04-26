@@ -29,7 +29,7 @@ def parse_precision(prec):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--curObj', type=int, default=0, help='select curriculum to train on')
+    parser.add_argument('--curObj', type=str, help='select curriculum to train on', required=True)
     parser.add_argument('--path2data', type=str, default='/media/rakshit/tank', help='path to dataset')
     parser.add_argument('--epochs', type=int, default=100, help='total number of epochs')
     parser.add_argument('--model', type=str, default='ritnet_v2', help='select model')
