@@ -219,17 +219,29 @@ def conf_Loss(x, gt, flag):
         loss = F.cross_entropy(x, gt)
     return loss
 
-def selfCorr_seg2el(opSeg, opEl):
+def selfCorr_seg2el(opSeg, n_opSeg, opEl, dims):
     # Self correction loss based on regressed ellipse fit. Higher the overlap,
     # the more negative the loss function will be
+    # opSeg: Segmentation output [B, 3, H, W]
+    # dims: Segmentation output dims
     # opEl: Regressed Ellipse output [B, 5]
-    # opSeg: Segmentation output [B, H, W]
+
     loss = 0
+    posMask = 0
+    negMask = 0
     B, H, W = opSeg.shape
+    opSeg = F.softmax(opSeg, dim=1)
     mesh = create_meshgrid(H, H, normalized_coordinates=True).squeeze() # 1xHxWx2
     mesh.requires_grad = False
+
+    all_dims = [0, 1, 2]
+    n_dims = [value for value in all_dims if value not in dims]
+
     for i in range(0, B):
         X = (mesh[..., 0] - opEl[0])*np.cos(opEl[-1]) + (mesh[..., 1] - opEl[1])*np.sin(opEl[-1])
         Y = -(mesh[..., 0] - opEl[0])*np.sin(opEl[-1]) + (mesh[..., 1] - opEl[1])*np.cos(opEl[-1])
-        loss += torch.sum((X/opEl[2])**2 + (Y/opEl[3])**2 - 1)
+        wtMat = torch.sum((X/opEl[2])**2 + (Y/opEl[3])**2 - 1) # Negative inside the ellipse
+        posMask += opSeg[:, i, ...] for i in dims
+        negMask += opSeg[:, i, ...] for i in n_dims
+        loss += wtMat*(posMask - negMask)
     return loss
