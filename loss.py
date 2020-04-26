@@ -9,8 +9,7 @@ import torch
 import numpy as np
 import torch.nn.functional as F
 
-from utils import create_meshgrid, ElliFit
-from utils import normPts, spatial_softargmax_2d, spatial_softmax_2d
+from utils import create_meshgrid
 
 '''
 def get_allLoss(op,
@@ -203,7 +202,6 @@ def wCE(ip, target, spatWts):
     loss = torch.mean(loss)
     return loss
 
-
 def conf_Loss(x, gt, flag):
     '''
     x: Input predicted one-hot encoding for dataset identity
@@ -219,4 +217,19 @@ def conf_Loss(x, gt, flag):
     else:
         # Else, return the secondary loss
         loss = F.cross_entropy(x, gt)
+    return loss
+
+def selfCorr_seg2el(opSeg, opEl):
+    # Self correction loss based on regressed ellipse fit. Higher the overlap,
+    # the more negative the loss function will be
+    # opEl: Regressed Ellipse output [B, 5]
+    # opSeg: Segmentation output [B, H, W]
+    loss = 0
+    B, H, W = opSeg.shape
+    mesh = create_meshgrid(H, H, normalized_coordinates=True).squeeze() # 1xHxWx2
+    mesh.requires_grad = False
+    for i in range(0, B):
+        X = (mesh[..., 0] - opEl[0])*np.cos(opEl[-1]) + (mesh[..., 1] - opEl[1])*np.sin(opEl[-1])
+        Y = -(mesh[..., 0] - opEl[0])*np.sin(opEl[-1]) + (mesh[..., 1] - opEl[1])*np.cos(opEl[-1])
+        loss += torch.sum((X/opEl[2])**2 + (Y/opEl[3])**2 - 1)
     return loss

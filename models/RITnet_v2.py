@@ -10,7 +10,7 @@ import torch.nn.functional as F
 
 from pytorchtools import linStack
 from utils import normPts, regressionModule
-from loss import conf_Loss, get_ptLoss, get_seg2ptLoss, get_segLoss
+from loss import conf_Loss, get_ptLoss, get_seg2ptLoss, get_segLoss, selfCorr_seg2el
 
 def getSizes(chz, growth, blks=4):
     # This function does not calculate the size requirements for head and tail
@@ -239,7 +239,9 @@ class DenseNet2D(nn.Module):
             if self.toggle:
                 # Primary loss + alpha*confusion
                 if self.selfCorr:
-                    loss = loss + F.l1_loss(pred_c_seg, pred_c)
+                    loss = loss + F.l1_loss(pred_c_seg, pred_c) +\
+                            selfCorr_seg2el(op[:,1,...], elOut[:,:5])+\
+                            selfCorr_seg2el(op[:,2,...], elOut[:,5:])
                 loss += self.disentangle_alpha*conf_Loss(pred_ds,
                                                          ID.to(torch.long),
                                                          self.toggle)
@@ -249,7 +251,9 @@ class DenseNet2D(nn.Module):
         else:
             # No disentanglement, proceed regularly
             if self.selfCorr:
-                loss = loss + F.l1_loss(pred_c_seg, pred_c)
+                loss = loss + F.l1_loss(pred_c_seg, pred_c) +\
+                        selfCorr_seg2el(op[:,1,...], elOut[:,:5])+\
+                        selfCorr_seg2el(op[:,2,...], elOut[:,5:])
         return op, elOut, latent, pred_c, pred_c_seg, loss.unsqueeze(0)
 
     def _initialize_weights(self):

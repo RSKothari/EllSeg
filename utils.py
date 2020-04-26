@@ -201,6 +201,7 @@ def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, heatmaps=False
     Note: If masks exist, then ellipse parameters would exist aswell.
     '''
     B, H, W = I.shape
+    mesh = create_meshgrid(H, W, normalized_coordinates=True) # 1xHxWx2
     H = np.array([[W/2, 0, W/2], [0, H/2, H/2], [0, 0, 1]])
     I_o = []
     for i in range(0, min(16, cond.shape[0])):
@@ -217,6 +218,14 @@ def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, heatmaps=False
 
             el_iris = my_ellipse(elNorm[i, 0, ...]).transform(H)[0]
             el_pupil = my_ellipse(elNorm[i, 1, ...]).transform(H)[0]
+            '''
+            # Just for experiments. Please ignore.
+            X = (mesh[..., 0].squeeze() - el_iris[0])*np.cos(el_iris[-1])+\
+                (mesh[..., 1].squeeze() - el_iris[1])*np.sin(el_iris[-1])
+            Y = -(mesh[..., 0].squeeze() - el_iris[0])*np.sin(el_iris[-1])+\
+                 (mesh[..., 1].squeeze() - el_iris[1])*np.cos(el_iris[-1])
+            [rr_i, cc_i] = np.find((X/el_iris[2])**2 + (Y/el_iris[3])**2 - 1 < 0)
+            '''
             [rr_i, cc_i] = ellipse_perimeter(int(el_iris[1]),
                                              int(el_iris[0]),
                                              int(el_iris[3]),
