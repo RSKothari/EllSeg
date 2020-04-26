@@ -181,8 +181,7 @@ if __name__ == '__main__':
                     loss = loss.mean() if args.useMultiGPU else loss
                     loss.backward()
                     opt_disent.step()
-                    #val = [param.grad.abs().mean().item() for name, param in model.named_parameters() if 'dsIdentify_lin' in name]
-                    #val = np.mean(val)
+
                     diff = val - loss.detach().item() # Loss derivative
                     val = loss.detach().item() # Update previous loss value
                     model.toggle = True if diff < EPS else False
@@ -304,10 +303,6 @@ if __name__ == '__main__':
             writer.add_embedding(torch.cat(latent_codes, 0),
                                  metadata=validObj.imList[:len(latent_codes)*args.batchsize, 2],
                                  global_step=epoch)
-
-        # Save out histogram of weights and biases - generally unrequired
-        # for name, param in model.named_parameters():
-        #     writer.add_histogram(name, param.clone().cpu().data.numpy(), epoch)
 
         f = 'Epoch:{}, Valid Loss: {:.3f}, mIoU: {}'
         logger.write(f.format(epoch, lossvalid, np.mean(ious)))

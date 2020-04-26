@@ -30,9 +30,6 @@ parser.add_argument('--noDisp', help='Specify flag to display labelled images', 
 parser.add_argument('--path2ds', help='Path to dataset', type=str)
 args = parser.parse_args()
 
-#from RITEyes_helper.helperfunctions import ransac, ElliFit, my_ellipse
-#from RITEyes_helper.helperfunctions import generateEmptyStorage, getValidPoints
-
 if args.noDisp:
     noDisp = True
     print('No graphics')

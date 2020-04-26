@@ -7,7 +7,9 @@ import matplotlib
 import numpy as np
 import deepdish as dd
 import scipy.io as scio
-from RITEyes_helper.helperfunctions import mypause, generateEmptyStorage
+
+sys.path.append('..')
+from helperfunctions import mypause, generateEmptyStorage
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--noDisp', help='Specify flag to display labelled images', type=int)

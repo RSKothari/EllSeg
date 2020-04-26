@@ -6,6 +6,7 @@ Created on Wed May 29 16:16:57 2019
 @author: rakshit
 """
 import os
+import sys
 import cv2
 import copy
 import glob
@@ -15,7 +16,9 @@ import numpy as np
 import deepdish as dd
 import scipy.io as scio
 
-from RITEyes_helper.helperfunctions import generateEmptyStorage
+sys.path.append('..')
+
+from helperfunctions import generateEmptyStorage
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--noDisp', help='Specify flag to display labelled images', type=bool)

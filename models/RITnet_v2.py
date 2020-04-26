@@ -239,9 +239,9 @@ class DenseNet2D(nn.Module):
             if self.toggle:
                 # Primary loss + alpha*confusion
                 if self.selfCorr:
-                    corrLoss = selfCorr_seg2el(op, elOut[:,5:], [2]) #+ selfCorr_seg2el(op, elOut[:,:5], [1,2])
+                    corrLoss = selfCorr_seg2el(op, elOut[:,5:], [2]) + selfCorr_seg2el(op, elOut[:,:5], [1,2])
                     loss = loss + F.l1_loss(pred_c_seg, pred_c) + 0.01*corrLoss
-                            
+
                 loss += self.disentangle_alpha*conf_Loss(pred_ds,
                                                          ID.to(torch.long),
                                                          self.toggle)
@@ -251,9 +251,10 @@ class DenseNet2D(nn.Module):
         else:
             # No disentanglement, proceed regularly
             if self.selfCorr:
-                corrLoss = selfCorr_seg2el(op, elOut[:,5:], [2]) #+ selfCorr_seg2el(op, elOut[:,:5], [1,2])
+                corrLoss = selfCorr_seg2el(op, elOut[:,5:], [2]) + selfCorr_seg2el(op, elOut[:,:5], [1,2])
+                print('Full loss: {}, corr loss: {}'.format(loss.item(), corrLoss.item()))
                 loss = loss + F.l1_loss(pred_c_seg, pred_c) + 0.01*corrLoss
-                                
+
         return op, elOut, latent, pred_c, pred_c_seg, loss.unsqueeze(0)
 
     def _initialize_weights(self):

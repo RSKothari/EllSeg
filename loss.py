@@ -9,7 +9,7 @@ import torch
 import numpy as np
 import torch.nn.functional as F
 
-from utils import create_meshgrid
+from utils import create_meshgrid, soft_heaviside
 
 '''
 def get_allLoss(op,
@@ -228,14 +228,21 @@ def selfCorr_seg2el(opSeg, opEl, dims):
 
     loss = 0
     B, C, H, W = opSeg.shape
-    opSeg = torch.softmax(opSeg, dim=1)
+    allDims = [0, 1, 2]
+    n_dims = [ele for ele in allDims if ele not in dims]
+    foreground = opSeg[:, dims, ...] if len(dims)==1 else torch.sum(opSeg[:, dims, ...], dim=1)
+    background = opSeg[:, n_dims, ...] if len(n_dims)==1 else torch.sum(opSeg[:, n_dims, ...], dim=1)
+    seg = torch.stack([foreground, background], dim=1)
+    seg = torch.softmax(seg, dim=1)
+
     mesh = create_meshgrid(H, W, normalized_coordinates=True).squeeze().cuda() # 1xHxWx2
     mesh.requires_grad = False
-   
+
     for i in range(0, B):
         X = (mesh[..., 0] - opEl[i, 0])*torch.cos(opEl[i, -1]) + (mesh[..., 1] - opEl[i, 1])*torch.sin(opEl[i, -1])
         Y = -(mesh[..., 0] - opEl[i, 0])*torch.sin(opEl[i, -1]) + (mesh[..., 1] - opEl[i, 1])*torch.cos(opEl[i, -1])
-        wtMat = ((X/opEl[i, 2])**2 + (Y/opEl[i, 3])**2 - 1)*(2/(H**2+W**2)**0.5) # Negative inside the ellipse
-        mask = opSeg[i, dims, ...] if len(dims)==1 else torch.sum(opSeg[i, dims, ...], dim=1)
-        loss += torch.sum(wtMat*(2*mask - 1))/(H*W) # 2*posMask -1 creates a SVM like seperation between positive and negative classes
+        wtMat = 1 - (X/opEl[i, 2])**2 + (Y/opEl[i, 3])**2
+        wtMat = soft_heaviside(wtMat, sc=0.001, mode=2) # Positive inside the ellipse
+        mask = -seg[i, 0, ...]*wtMat
+        loss += torch.sum(mask)/(H*W) # 2*posMask -1 creates a SVM like seperation between positive and negative classes
     return loss/B

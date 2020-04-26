@@ -9,7 +9,7 @@ import os
 import glob
 import torch
 
-path2logs = os.path.join(os.getcwd(), 'logs', 'ritnet')
+path2logs = os.path.join('..', 'logs', 'ritnet')
 
 strSys = 'RC'
 cond = [0, 1, 2]

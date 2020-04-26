@@ -10,6 +10,7 @@ else, excuse - Wolfgang Fuhl
 """
 import os
 import cv2
+import sys
 import glob
 import copy
 import argparse
@@ -18,12 +19,14 @@ import numpy as np
 import deepdish as dd
 import scipy.io as scio
 
-from RITEyes_helper.helperfunctions import generateEmptyStorage, mypause
+sys.path.append('..')
+from helperfunctions import generateEmptyStorage, mypause
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--noDisp', help='Specify flag to display labelled images', type=int)
 parser.add_argument('--path2ds', help='Path to dataset', type=str)
 args = parser.parse_args()
+
 if args.noDisp:
     noDisp = True
     print('No graphics')

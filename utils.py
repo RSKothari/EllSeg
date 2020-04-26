@@ -219,19 +219,20 @@ def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, heatmaps=False
             #el_iris = my_ellipse(elNorm[i, 0, ...]).transform(H)[0]
             el_iris = elNorm[i, 0, ...]
             el_pupil = my_ellipse(elNorm[i, 1, ...]).transform(H)[0]
-            
+
             # Just for experiments. Please ignore.
             X = (mesh[..., 0].squeeze() - el_iris[0])*np.cos(el_iris[-1])+\
                 (mesh[..., 1].squeeze() - el_iris[1])*np.sin(el_iris[-1])
             Y = -(mesh[..., 0].squeeze() - el_iris[0])*np.sin(el_iris[-1])+\
                  (mesh[..., 1].squeeze() - el_iris[1])*np.cos(el_iris[-1])
-            wtMat = (X/el_iris[2])**2 + (Y/el_iris[3])**2 - 1 
+            R = X**2 + Y**2 + 1e-5
+            wtMat = ((X/el_iris[2])**2 + (Y/el_iris[3])**2 - 1)/R
             print(wtMat.max())
             print(wtMat.min())
             [rr_i, cc_i] = np.where(wtMat< 0)
             print(rr_i)
             print(cc_i)
-            
+
             '''
             [rr_i, cc_i] = ellipse_perimeter(int(el_iris[1]),
                                              int(el_iris[0]),
@@ -502,6 +503,21 @@ def spatial_softargmax_2d(input: torch.Tensor, normalized_coordinates: bool = Tr
     output: torch.Tensor = torch.cat([expected_x, expected_y], -1)
 
     return output.view(batch_size, channels, 2)  # BxNx2
+
+def soft_heaviside(x, sc, mode):
+    '''
+    Given an input and a scaling factor (default 64), the soft heaviside
+    function approximates the behavior of a 0 or 1 operation in a differentiable
+    manner.
+    '''
+    if mode==1:
+        # Try sc = 64
+        return 1/(1 + torch.exp(-sc/x))
+    elif mode==2:
+        # Try sc = 0.001
+        return 0.5*(1 + (2/np.pi)*torch.atan2(x, sc))
+    else:
+        print('Mode undefined')
 
 class regressionModule(torch.nn.Module):
     def __init__(self, sizes, opChannels=10):
