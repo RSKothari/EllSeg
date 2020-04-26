@@ -216,21 +216,29 @@ def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, heatmaps=False
             rr, cc = np.where(mask[i, ...] == 2)
             im[rr, cc, ...] = np.array([255, 255, 0]) # Yellow
 
-            el_iris = my_ellipse(elNorm[i, 0, ...]).transform(H)[0]
+            #el_iris = my_ellipse(elNorm[i, 0, ...]).transform(H)[0]
+            el_iris = elNorm[i, 0, ...]
             el_pupil = my_ellipse(elNorm[i, 1, ...]).transform(H)[0]
-            '''
+            
             # Just for experiments. Please ignore.
             X = (mesh[..., 0].squeeze() - el_iris[0])*np.cos(el_iris[-1])+\
                 (mesh[..., 1].squeeze() - el_iris[1])*np.sin(el_iris[-1])
             Y = -(mesh[..., 0].squeeze() - el_iris[0])*np.sin(el_iris[-1])+\
                  (mesh[..., 1].squeeze() - el_iris[1])*np.cos(el_iris[-1])
-            [rr_i, cc_i] = np.find((X/el_iris[2])**2 + (Y/el_iris[3])**2 - 1 < 0)
+            wtMat = (X/el_iris[2])**2 + (Y/el_iris[3])**2 - 1 
+            print(wtMat.max())
+            print(wtMat.min())
+            [rr_i, cc_i] = np.where(wtMat< 0)
+            print(rr_i)
+            print(cc_i)
+            
             '''
             [rr_i, cc_i] = ellipse_perimeter(int(el_iris[1]),
                                              int(el_iris[0]),
                                              int(el_iris[3]),
                                              int(el_iris[2]),
                                              orientation=el_iris[4])
+            '''
             [rr_p, cc_p] = ellipse_perimeter(int(el_pupil[1]),
                                              int(el_pupil[0]),
                                              int(el_pupil[3]),
@@ -349,8 +357,9 @@ def lossandaccuracy(args, loader, model, alpha, device):
                                          img.shape[2:],
                                          True)[0] # Unnormalizes the points
 
-            angDist_reg = getAng_metric(elNorm[:, 0, :].numpy(),
-                                        elOut[:, 4].detach().cpu().numpy(),
+            # Iris angle
+            angDist_reg = getAng_metric(elNorm[:, 1, -1].numpy(),
+                                        elOut[:, -1].detach().cpu().numpy(),
                                         cond[:, 1].numpy())[0]
 
             predict = get_predictions(output)

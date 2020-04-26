@@ -224,8 +224,8 @@ if __name__ == '__main__':
                                          cond[:,0].numpy(),
                                          img.shape[2:],
                                          True)[0] # Unnormalizes the points
-            angDist_reg = getAng_metric(elNorm[:, 1, 4].numpy(),
-                                        elOut[:, 4].detach().cpu().numpy(),
+            angDist_reg = getAng_metric(elNorm[:, 1, -1].numpy(),
+                                        elOut[:, -1].detach().cpu().numpy(),
                                         cond[:, 1].numpy())[0]
 
             # Append scores to running metric

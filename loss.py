@@ -228,7 +228,7 @@ def selfCorr_seg2el(opSeg, opEl, dims):
 
     loss = 0
     B, C, H, W = opSeg.shape
-    opSeg = F.softmax(opSeg, dim=1)
+    opSeg = torch.softmax(opSeg, dim=1)
     mesh = create_meshgrid(H, W, normalized_coordinates=True).squeeze().cuda() # 1xHxWx2
     mesh.requires_grad = False
    
@@ -236,6 +236,6 @@ def selfCorr_seg2el(opSeg, opEl, dims):
         X = (mesh[..., 0] - opEl[i, 0])*torch.cos(opEl[i, -1]) + (mesh[..., 1] - opEl[i, 1])*torch.sin(opEl[i, -1])
         Y = -(mesh[..., 0] - opEl[i, 0])*torch.sin(opEl[i, -1]) + (mesh[..., 1] - opEl[i, 1])*torch.cos(opEl[i, -1])
         wtMat = ((X/opEl[i, 2])**2 + (Y/opEl[i, 3])**2 - 1)*(2/(H**2+W**2)**0.5) # Negative inside the ellipse
-        mask = opSeg[:, dims, ...] if len(dims)==1 else torch.sum(opSeg[:, dims, ...], dim=1)
+        mask = opSeg[i, dims, ...] if len(dims)==1 else torch.sum(opSeg[i, dims, ...], dim=1)
         loss += torch.sum(wtMat*(2*mask - 1))/(H*W) # 2*posMask -1 creates a SVM like seperation between positive and negative classes
     return loss/B

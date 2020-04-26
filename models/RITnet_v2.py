@@ -221,16 +221,16 @@ class DenseNet2D(nn.Module):
         pred_c = elOut[:, 5:7] # Columns 5 & 6 correspond to pupil center
 
         op_tup = get_allLoss(op, # Output segmentation map
-                                elOut, # Predicted Ellipse parameters
-                                target, # Segmentation targets
-                                pupil_center, # Pupil center
-                                elPts, # Normalized ellipse points
-                                elNorm, # Normalized ellipse equation
-                                spatWts, # Spatial weights
-                                distMap, # Distance maps
-                                cond, # Condition
-                                ID, # Image and dataset ID
-                                alpha)
+                            elOut, # Predicted Ellipse parameters
+                            target, # Segmentation targets
+                            pupil_center, # Pupil center
+                            elPts, # Normalized ellipse points
+                            elNorm, # Normalized ellipse equation
+                            spatWts, # Spatial weights
+                            distMap, # Distance maps
+                            cond, # Condition
+                            ID, # Image and dataset ID
+                            alpha)
         loss, pred_c_seg = op_tup
 
         if self.disentangle:
@@ -239,9 +239,9 @@ class DenseNet2D(nn.Module):
             if self.toggle:
                 # Primary loss + alpha*confusion
                 if self.selfCorr:
-                    loss = loss + F.l1_loss(pred_c_seg, pred_c) +\
-                            selfCorr_seg2el(op, elOut[:,:5])+\
-                            selfCorr_seg2el(op, elOut[:,5:])
+                    corrLoss = selfCorr_seg2el(op, elOut[:,5:], [2]) #+ selfCorr_seg2el(op, elOut[:,:5], [1,2])
+                    loss = loss + F.l1_loss(pred_c_seg, pred_c) + 0.01*corrLoss
+                            
                 loss += self.disentangle_alpha*conf_Loss(pred_ds,
                                                          ID.to(torch.long),
                                                          self.toggle)
@@ -251,9 +251,9 @@ class DenseNet2D(nn.Module):
         else:
             # No disentanglement, proceed regularly
             if self.selfCorr:
-                loss = loss + F.l1_loss(pred_c_seg, pred_c) +\
-                                selfCorr_seg2el(op, elOut[:,:5], [1,2])+\
-                                selfCorr_seg2el(op, elOut[:,5:], [2])
+                corrLoss = selfCorr_seg2el(op, elOut[:,5:], [2]) #+ selfCorr_seg2el(op, elOut[:,:5], [1,2])
+                loss = loss + F.l1_loss(pred_c_seg, pred_c) + 0.01*corrLoss
+                                
         return op, elOut, latent, pred_c, pred_c_seg, loss.unsqueeze(0)
 
     def _initialize_weights(self):
