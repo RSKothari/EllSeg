@@ -265,7 +265,7 @@ class WeightedHausdorffDistance(nn.Module):
                                Default: False.
         :param device: Device where all Tensors will reside.
         """
-        super(nn.Module, self).__init__()
+        super(WeightedHausdorffDistance, self).__init__()
 
         # Prepare all possible (row, col) locations in the image
         self.height, self.width = resized_height, resized_width
@@ -278,8 +278,7 @@ class WeightedHausdorffDistance(nn.Module):
         self.all_img_locations = torch.from_numpy(cartesian([np.arange(resized_height),
                                                              np.arange(resized_width)]))
         # Convert to appropiate type
-        self.all_img_locations = torch.tensor(self.all_img_locations,
-                                              dtype=torch.get_default_dtype()).to(device)
+        self.all_img_locations = torch.clone(self.all_img_locations).to(device)
 
         self.return_2_terms = return_2_terms
 

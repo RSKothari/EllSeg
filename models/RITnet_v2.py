@@ -183,7 +183,7 @@ class DenseNet2D(nn.Module):
         self.disentangle_alpha = 2
 
         self.klLoss = torch.nn.KLDivLoss()
-        self.wHauss = WeightedHausdorffDistance(240, 320, torch.device('cuda'))
+        self.wHauss = WeightedHausdorffDistance(240, 320, return_2_terms=True, device=torch.device("cuda"))
 
         self.enc = DenseNet_encoder(in_c=1, chz=chz, actfunc=actfunc, growth=growth, norm=norm)
         self.dec = DenseNet_decoder(chz=chz, out_c=3, actfunc=actfunc, growth=growth, norm=norm)
@@ -226,18 +226,18 @@ class DenseNet2D(nn.Module):
         # Seg2Pt loss- if Iris segmentation does not exist, it will use
         # pupil center to regress using WHauss.
         wtCond = torch.stack([cond[:, 1], cond[:, 1]], dim=1)
-        iris_center = unnormPts(elNorm[:, :2], target.shape[1:])*(1-wtCond) +\
+        iris_center = unnormPts(elNorm[:,0, :2], target.shape[1:])*(1-wtCond) +\
                                 wtCond*pupil_center
         dsizes = torch.from_numpy(np.stack([[H]*B, [W]*B], axis=1)).cuda()
         pupMap = op[:, -1, ...]
-        pupMap = torch.softmax(pupMap.view(B, -1), 1).view(B, H, W)
+        pupMap = torch.sigmoid(pupMap.view(B, -1)).view(B, H, W)
         iriMap = op[:, -1, ...] + op[:, 1, ...]
-        iriMap = torch.softmax(iriMap.view(B, -1), 1).view(B, H, W)
+        iriMap = torch.sigmoid(iriMap.view(B, -1)).view(B, H, W)
 
         # wHauss expects GT as rows and cols
-        loss_seg2pt_pup = self.wHauss(pupMap, pupil_center[:, [1, 0]], dsizes)
-        loss_seg2pt_iri = self.wHauss(iriMap, iris_center[:, [1, 0]], dsizes)
-        loss_seg2pt = loss_seg2pt_pup + loss_seg2pt_iri
+        loss_seg2pt_pup, term2_pup = self.wHauss(pupMap, pupil_center[:, [1, 0]], dsizes)
+        loss_seg2pt_iri, term2_iri = self.wHauss(iriMap, iris_center[:, [1, 0]], dsizes)
+        loss_seg2pt = loss_seg2pt_pup + term2_pup# + loss_seg2pt_iri + term2_iri
 
         op_tup = get_allLoss(op, # Output segmentation map
                             elOut, # Predicted Ellipse parameters
@@ -251,7 +251,7 @@ class DenseNet2D(nn.Module):
                             ID, # Image and dataset ID
                             alpha)
         loss, pred_c_seg = op_tup
-        loss += loss_seg2pt
+        loss += 0.01*loss_seg2pt
 
         if self.disentangle:
             pred_ds = self.dsIdentify_lin(latent)
@@ -317,7 +317,7 @@ def get_allLoss(op,
     l_seg = get_segLoss(op, target, spatWts, distMap, cond[:, 1], alpha)
 
     # Bottleneck Ellipse center loss
-    #l_pt = get_ptLoss(pred_c, normPts(pupil_center, target.shape[1:]), cond[:, 0])
+    l_pt = get_ptLoss(pred_c, normPts(pupil_center, target.shape[1:]), cond[:, 0])
 
     # Segmentation to Ellipse center loss
     l_seg2pt, pred_c_seg = get_seg2ptLoss(op[:, 2, ...],
