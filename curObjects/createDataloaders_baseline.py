@@ -25,7 +25,7 @@ for train_set in list_ds:
         print('Condition #: {}. Train: {}. Test: {}'.format(num,
                                                             train_set,
                                                             test_set))
-        cond_fName = 'Cond_train_{}_test_{}.pkl'.format(train_set, test_set)
+        cond_fName = 'cond_train_{}_test_{}.pkl'.format(train_set, test_set)
         
         if train_set == test_set:
             # Inter dataset evaluation
@@ -46,6 +46,10 @@ for train_set in list_ds:
             dataDiv_obj = CurLib.generate_fileList(AllDS_cond, mode='none', notest=True)
             testObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'test', False, (480, 640), scale=0.5)
         
+        print('Training samples: {}'.format(trainObj.imList.shape[0]))
+        print('Validation samples: {}'.format(validObj.imList.shape[0]))
+        print('Testing samples: {}'.format(testObj.imList.shape[0]))
+        
         path2save = os.path.join(os.getcwd(), 'baseline', cond_fName)
         if os.path.exists(path2save) and keepOld:
             print('Preserving old selections ...')
@@ -54,4 +58,6 @@ for train_set in list_ds:
             trainObj.imList = trainObj_orig.imList
             validObj.imList = validObj_orig.imList
             testObj.imList = testObj_orig.imList
+            pickle.dump((trainObj, validObj, testObj), open(path2save, 'wb'))
+        else:
             pickle.dump((trainObj, validObj, testObj), open(path2save, 'wb'))

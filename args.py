@@ -41,8 +41,8 @@ def parse_args():
     parser.add_argument('--prec', type=int, default=32, help='precision. 16, 32, 64')
     parser.add_argument('--disp', type=int, default=1, help='display intermediate ouput')
     parser.add_argument('--workers', type=int, default=0, help='number of workers')
-    parser.add_argument('--overfit', type=int, default=0, help='overfit to N batches?')
-    parser.add_argument('--selfCorr', type=int, default=1, help='self regulation?')
+    parser.add_argument('--overfit', type=int, default=40, help='overfit to N batches?')
+    parser.add_argument('--selfCorr', type=int, default=0, help='self regulation?')
     parser.add_argument('--disentangle', type=int, default=0, help='Explicit dataset bias removal?')
 
     args = parser.parse_args()
