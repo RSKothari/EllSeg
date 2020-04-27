@@ -5,7 +5,7 @@ Created on Sun Apr 26 21:36:48 2020
 @author: Rudra
 """
 
-import numpy as np
+import pickle as pkl
 
 # NVGaze
 nv_subs1 = ['nvgaze_female_{:02}_public_50K_{}'.format(i+1, j+1) for i in range(0, 4) for j in range(0, 4)]
@@ -63,4 +63,4 @@ DS_test = {'NVGaze':nv_subs_test,
 DS_selections = {'train':DS_train,
                  'test' : DS_test}
 
-np.save('dataset_selections', DS_selections)
+pkl.dump(DS_selections, open('dataset_selections.pkl', 'wb'))

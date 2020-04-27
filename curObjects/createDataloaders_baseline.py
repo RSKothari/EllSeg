@@ -17,7 +17,7 @@ path2data = '/media/rakshit/tank/Dataset'
 path2h5 = os.path.join(path2data, 'All')
 keepOld = True
 
-DS_sel = np.load('dataset_selections.npy')
+DS_sel = pickle.load(open('dataset_selections.pkl', 'rb'))
 AllDS = CurLib.readArchives(os.path.join(path2data, 'MasterKey'))
 list_ds = ['NVGaze', 'OpenEDS', 'riteyes_general', 'LPW', 'Fuhl', 'PupilNet']
 
@@ -25,13 +25,13 @@ list_ds = ['NVGaze', 'OpenEDS', 'riteyes_general', 'LPW', 'Fuhl', 'PupilNet']
 for train_set in list_ds:
 
     # Train object
-    AllDS_cond = CurLib.selSubset(AllDS, DS_sel[train_set]['train'])
+    AllDS_cond = CurLib.selSubset(AllDS, DS_sel['train'][train_set])
     dataDiv_obj = CurLib.generate_fileList(AllDS_cond, mode='vanilla', notest=False)
     trainObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'train', True, (480, 640), scale=0.5)
     validObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'valid', False, (480, 640), scale=0.5)
 
     # Test object
-    AllDS_cond = CurLib.selSubset(AllDS, DS_sel[train_set]['test'])
+    AllDS_cond = CurLib.selSubset(AllDS, DS_sel['test'][train_set])
     dataDiv_obj = CurLib.generate_fileList(AllDS_cond, mode='none', notest=True)
     testObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'test', False, (480, 640), scale=0.5)
 

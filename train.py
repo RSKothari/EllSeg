@@ -270,12 +270,13 @@ if __name__ == '__main__':
                                              'std':np.nanstd(pup_c_lat_dists)}, epoch)
         writer.add_scalars('train/pup_s_c', {'mu':np.nanmean(pup_c_seg_dists),
                                              'std':np.nanstd(pup_c_seg_dists)}, epoch)
-        writer.add_scalars('train/pup_ang', {'mu':np.nanmean(pup_ang_lat),
-                                             'std':np.nanstd(pup_ang_lat)}, epoch)
-        writer.add_scalars('train/iou', {'mIOU':np.mean(ious),
-                                         'bG':ious[0],
-                                         'iris':ious[1],
-                                         'pupil':ious[2]}, epoch)
+        if np.any(~np.isnan(pup_ang_lat)):
+            writer.add_scalars('train/pup_ang', {'mu':np.nanmean(pup_ang_lat),
+                                                 'std':np.nanstd(pup_ang_lat)}, epoch)
+            writer.add_scalars('train/iou', {'mIOU':np.mean(ious),
+                                             'bG':ious[0],
+                                             'iris':ious[1],
+                                             'pupil':ious[2]}, epoch)
 
         out_tup = lossandaccuracy(args, # Training arguments
                                   validloader, # Validation loader
@@ -290,12 +291,13 @@ if __name__ == '__main__':
                                              'std':np.nanstd(pup_c_lat_dists)}, epoch)
         writer.add_scalars('valid/pup_s_c', {'mu':np.nanmean(pup_c_seg_dists),
                                              'std':np.nanstd(pup_c_seg_dists)}, epoch)
-        writer.add_scalars('valid/pup_ang', {'mu':np.nanmean(pup_ang_lat),
-                                             'std':np.nanstd(pup_ang_lat)}, epoch)
-        writer.add_scalars('valid/iou', {'mIOU':np.mean(ious),
-                                         'bG':ious[0],
-                                         'iris':ious[1],
-                                         'pupil':ious[2]}, epoch)
+        if np.any(~np.isnan(pup_ang_lat)):
+            writer.add_scalars('valid/pup_ang', {'mu':np.nanmean(pup_ang_lat),
+                                                 'std':np.nanstd(pup_ang_lat)}, epoch)
+            writer.add_scalars('valid/iou', {'mIOU':np.mean(ious),
+                                             'bG':ious[0],
+                                             'iris':ious[1],
+                                             'pupil':ious[2]}, epoch)
         writer.add_image('train/op', dispI, epoch)
 
         if epoch%embed_log == 0:

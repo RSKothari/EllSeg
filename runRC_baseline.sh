@@ -19,9 +19,9 @@ spack env activate riteyes4
 # spack load /me75cc2 # Load tqdm
 # spack load /hlxw2mt # Load h5py with MPI
 
-declare -a curObj_list=("0" "1" "2")
-declare -a selfCorr_list=("0" "1")
-declare -a disentangle_list=("0" "1")
+declare -a curObj_list=("NVGaze" "PupilNet" "OpenEDS" "Fuhl" "riteyes-general", "LPW")
+declare -a selfCorr_list=("0")
+declare -a disentangle_list=("0")
 
 for curObj in "${curObj_list[@]}"
 do
@@ -34,7 +34,7 @@ do
             str+="--curObj=${curObj} --batchsize=${batchsize} --workers=${workers} --prec=32 --epochs=${epochs} "
             str+="--disp=0 --overfit=0 --lr=${lr} --selfCorr=${selfCorr} --disentangle=${disentangle}"
             echo -e $str > command.lock
-            sbatch -J ${baseJobName} -o "rc_log/baseline/${baseJobName}.o" -e "rc_log/baseline/${baseJobName}.e" --mem=16G --cpus-per-task=9 -p tier3 -A riteyes --gres=gpu:p4:2 -t 4-0:0:0 command.lock
+            sbatch -J ${baseJobName} -o "rc_log/baseline/${baseJobName}.o" -e "rc_log/baseline/${baseJobName}.e" --mem=16G --cpus-per-task=9 -p debug -A riteyes --gres=gpu:p4:2 -t 0-1:0:0 command.lock
         done
     done
 done
