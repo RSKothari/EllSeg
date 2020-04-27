@@ -183,7 +183,7 @@ class DenseNet2D(nn.Module):
         self.disentangle_alpha = 2
 
         self.klLoss = torch.nn.KLDivLoss()
-        self.wHauss = WeightedHausdorffDistance(240, 320, return_2_terms=True, device=torch.device("cuda"))
+        self.wHauss = WeightedHausdorffDistance(240, 320, return_2_terms=False, device=torch.device("cuda"))
 
         self.enc = DenseNet_encoder(in_c=1, chz=chz, actfunc=actfunc, growth=growth, norm=norm)
         self.dec = DenseNet_decoder(chz=chz, out_c=3, actfunc=actfunc, growth=growth, norm=norm)
@@ -223,21 +223,12 @@ class DenseNet2D(nn.Module):
         op = self.dec(x4, x3, x2, x1, x)
         pred_c = elOut[:, 5:7] # Columns 5 & 6 correspond to pupil center
 
-        # Seg2Pt loss- if Iris segmentation does not exist, it will use
-        # pupil center to regress using WHauss.
-        wtCond = torch.stack([cond[:, 1], cond[:, 1]], dim=1)
-        iris_center = unnormPts(elNorm[:,0, :2], target.shape[1:])*(1-wtCond) +\
-                                wtCond*pupil_center
         dsizes = torch.from_numpy(np.stack([[H]*B, [W]*B], axis=1)).cuda()
         pupMap = op[:, -1, ...]
         pupMap = torch.sigmoid(pupMap.view(B, -1)).view(B, H, W)
-        iriMap = op[:, -1, ...] + op[:, 1, ...]
-        iriMap = torch.sigmoid(iriMap.view(B, -1)).view(B, H, W)
 
         # wHauss expects GT as rows and cols
-        loss_seg2pt_pup, term2_pup = self.wHauss(pupMap, pupil_center[:, [1, 0]], dsizes)
-        loss_seg2pt_iri, term2_iri = self.wHauss(iriMap, iris_center[:, [1, 0]], dsizes)
-        loss_seg2pt = loss_seg2pt_pup + term2_pup# + loss_seg2pt_iri + term2_iri
+        loss_seg2pt = self.wHauss(pupMap, pupil_center[:, [1, 0]], dsizes)
 
         op_tup = get_allLoss(op, # Output segmentation map
                             elOut, # Predicted Ellipse parameters
@@ -259,8 +250,8 @@ class DenseNet2D(nn.Module):
             if self.toggle:
                 # Primary loss + alpha*confusion
                 if self.selfCorr:
-                    corrLoss = selfCorr_seg2el(op, elOut[:,5:], [2]) + selfCorr_seg2el(op, elOut[:,:5], [1,2])
-                    loss = loss + F.l1_loss(pred_c_seg, pred_c) + 0.01*corrLoss
+                    corrLoss = selfCorr_seg2el(op, elOut[:,5:], [2])
+                    loss = loss + F.l1_loss(pred_c_seg, pred_c) + alpha*corrLoss
 
                 loss += self.disentangle_alpha*conf_Loss(pred_ds,
                                                          ID.to(torch.long),
@@ -271,9 +262,9 @@ class DenseNet2D(nn.Module):
         else:
             # No disentanglement, proceed regularly
             if self.selfCorr:
-                corrLoss = selfCorr_seg2el(op, elOut[:,5:], [2]) + selfCorr_seg2el(op, elOut[:,:5], [1,2])
+                corrLoss = selfCorr_seg2el(op, elOut[:,5:], [2])
                 print('Full loss: {}, corr loss: {}'.format(loss.item(), corrLoss.item()))
-                loss = loss + F.l1_loss(pred_c_seg, pred_c) + 0.01*corrLoss
+                loss = loss + F.l1_loss(pred_c_seg, pred_c) + alpha*corrLoss
 
         return op, elOut, latent, pred_c, pred_c_seg, loss.unsqueeze(0)
 
@@ -311,7 +302,7 @@ def get_allLoss(op,
     elPhi: Phi values from normalized ellipse equation
     '''
     B, C, H, W = op.shape
-    #pred_c = elOut[:, 5:7]
+    pred_c = elOut[:, 5:7]
 
     # Segmentation loss
     l_seg = get_segLoss(op, target, spatWts, distMap, cond[:, 1], alpha)
@@ -327,4 +318,4 @@ def get_allLoss(op,
     # Compute ellipse losses - F1 loss for valid samples
     l_ellipse = get_ptLoss(elOut, elNorm.view(-1, 10), cond[:, 1])
 
-    return (l_ellipse + l_seg2pt + 20*l_seg, pred_c_seg)
+    return (l_ellipse + l_seg2pt + 20*l_seg + 10*l_pt, pred_c_seg)

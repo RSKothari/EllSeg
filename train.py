@@ -271,6 +271,7 @@ if __name__ == '__main__':
         writer.add_scalars('train/pup_s_c', {'mu':np.nanmean(pup_c_seg_dists),
                                              'std':np.nanstd(pup_c_seg_dists)}, epoch)
         if np.any(~np.isnan(pup_ang_lat)):
+            # These values will not exist when training with pure pupil center code
             writer.add_scalars('train/pup_ang', {'mu':np.nanmean(pup_ang_lat),
                                                  'std':np.nanstd(pup_ang_lat)}, epoch)
             writer.add_scalars('train/iou', {'mIOU':np.mean(ious),
@@ -292,6 +293,7 @@ if __name__ == '__main__':
         writer.add_scalars('valid/pup_s_c', {'mu':np.nanmean(pup_c_seg_dists),
                                              'std':np.nanstd(pup_c_seg_dists)}, epoch)
         if np.any(~np.isnan(pup_ang_lat)):
+            # These values will not exist when training with pure pupil center code
             writer.add_scalars('valid/pup_ang', {'mu':np.nanmean(pup_ang_lat),
                                                  'std':np.nanstd(pup_ang_lat)}, epoch)
             writer.add_scalars('valid/iou', {'mIOU':np.mean(ious),

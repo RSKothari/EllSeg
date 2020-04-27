@@ -246,10 +246,10 @@ def selfCorr_seg2el(opSeg, opEl, dims):
     for i in range(0, B):
         X = (mesh[..., 0] - opEl[i, 0])*torch.cos(opEl[i, -1]) + (mesh[..., 1] - opEl[i, 1])*torch.sin(opEl[i, -1])
         Y = -(mesh[..., 0] - opEl[i, 0])*torch.sin(opEl[i, -1]) + (mesh[..., 1] - opEl[i, 1])*torch.cos(opEl[i, -1])
-        wtMat = 1 - (X/opEl[i, 2])**2 + (Y/opEl[i, 3])**2
+        wtMat = 1 - (X/opEl[i, 2])**2 - (Y/opEl[i, 3])**2
         wtMat = soft_heaviside(wtMat, sc=0.001, mode=2) # Positive inside the ellipse
-        mask = -seg[i, 0, ...]*wtMat
-        loss += torch.sum(mask)/(H*W) # 2*posMask -1 creates a SVM like seperation between positive and negative classes
+        mask = -seg[i, 0, ...]*wtMat # Higher overlap means more negative
+        loss += torch.sum(mask)/(H*W)
     return loss/B
 
 class WeightedHausdorffDistance(nn.Module):
