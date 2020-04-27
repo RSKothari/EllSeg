@@ -7,9 +7,11 @@ Created on Mon Mar  2 21:05:09 2020
 """
 import torch
 import numpy as np
+import torch.nn as nn
 import torch.nn.functional as F
+from sklearn.utils.extmath import cartesian
 
-from utils import create_meshgrid, soft_heaviside
+from utils import create_meshgrid, soft_heaviside, _assert_no_grad, cdist
 
 '''
 def get_allLoss(op,
@@ -103,7 +105,6 @@ def get_seg2ptLoss(op, gtPts, temperature):
     # op: BXHXW - single channel corresponding to pupil
     B, H, W = op.shape
     wtMap = F.softmax(op.view(B, -1)*temperature, dim=1) # [B, HXW]
-    stdLoss = torch.mean(torch.std(wtMap, dim=1)) # Unsupervised loss: Reduce STD
 
     XYgrid = create_meshgrid(H, W, normalized_coordinates=True) # 1xHxWx2
 
@@ -115,7 +116,7 @@ def get_seg2ptLoss(op, gtPts, temperature):
     predPts = torch.stack([xpos, ypos], dim=1).squeeze()
 
     loss = F.l1_loss(predPts, gtPts, reduction='mean')
-    return loss+stdLoss, predPts
+    return loss, predPts
 
 def get_segLoss(op, target, spatWts, distMap, cond, alpha):
     # Custom function to iteratively go over each sample in a batch and
@@ -250,3 +251,114 @@ def selfCorr_seg2el(opSeg, opEl, dims):
         mask = -seg[i, 0, ...]*wtMat
         loss += torch.sum(mask)/(H*W) # 2*posMask -1 creates a SVM like seperation between positive and negative classes
     return loss/B
+
+class WeightedHausdorffDistance(nn.Module):
+    def __init__(self,
+                 resized_height, resized_width,
+                 return_2_terms=False,
+                 device=torch.device('cpu')):
+        """
+        :param resized_height: Number of rows in the image.
+        :param resized_width: Number of columns in the image.
+        :param return_2_terms: Whether to return the 2 terms
+                               of the WHD instead of their sum.
+                               Default: False.
+        :param device: Device where all Tensors will reside.
+        """
+        super(nn.Module, self).__init__()
+
+        # Prepare all possible (row, col) locations in the image
+        self.height, self.width = resized_height, resized_width
+        self.resized_size = torch.tensor([resized_height,
+                                          resized_width],
+                                         dtype=torch.get_default_dtype(),
+                                         device=device)
+        self.max_dist = np.sqrt(resized_height**2 + resized_width**2)
+        self.n_pixels = resized_height * resized_width
+        self.all_img_locations = torch.from_numpy(cartesian([np.arange(resized_height),
+                                                             np.arange(resized_width)]))
+        # Convert to appropiate type
+        self.all_img_locations = torch.tensor(self.all_img_locations,
+                                              dtype=torch.get_default_dtype()).to(device)
+
+        self.return_2_terms = return_2_terms
+
+    def forward(self, prob_map, gt, orig_sizes):
+        """
+        Compute the Weighted Hausdorff Distance function
+         between the estimated probability map and ground truth points.
+        The output is the WHD averaged through all the batch.
+
+        :param prob_map: (B x H x W) Tensor of the probability map of the estimation.
+                         B is batch size, H is height and W is width.
+                         Values must be between 0 and 1.
+        :param gt: List of Tensors of the Ground Truth points.
+                   Must be of size B as in prob_map.
+                   Each element in the list must be a 2D Tensor,
+                   where each row is the (y, x), i.e, (row, col) of a GT point.
+        :param orig_sizes: Bx2 Tensor containing the size of the original images.
+                           B is batch size. The size must be in (height, width) format.
+        :param orig_widths: List of the original width for each image in the batch.
+        :return: Single-scalar Tensor with the Weighted Hausdorff Distance.
+                 If self.return_2_terms=True, then return a tuple containing
+                 the two terms of the Weighted Hausdorff Distance.
+        """
+
+        _assert_no_grad([gt])
+
+        assert prob_map.dim() == 3, 'The probability map must be (B x H x W)'
+        assert prob_map.size()[1:3] == (self.height, self.width), \
+            'You must configure the WeightedHausdorffDistance with the height and width of the ' \
+            'probability map that you are using, got a probability map of size %s'\
+            % str(prob_map.size())
+
+        batch_size = prob_map.shape[0]
+        assert batch_size == gt.shape[0]
+
+        terms_1 = []
+        terms_2 = []
+        for b in range(batch_size):
+
+            # One by one
+            prob_map_b = prob_map[b, :, :]
+            gt_b = gt[b, ...]
+            orig_size_b = orig_sizes[b, :]
+            norm_factor = (orig_size_b/self.resized_size).unsqueeze(0)
+
+            # Pairwise distances between all possible locations and the GTed locations
+            n_gt_pts = gt_b.size()[0]
+            normalized_x = norm_factor.repeat(self.n_pixels, 1)*self.all_img_locations
+            normalized_y = norm_factor.repeat(len(gt_b), 1)*gt_b
+            d_matrix = cdist(normalized_x, normalized_y)
+
+            # Reshape probability map as a long column vector,
+            # and prepare it for multiplication
+            p = prob_map_b.view(prob_map_b.nelement())
+            n_est_pts = p.sum()
+            p_replicated = p.view(-1, 1).repeat(1, n_gt_pts)
+
+            eps = 1e-6
+            alpha = 4
+
+            # Weighted Hausdorff Distance
+            term_1 = (1 / (n_est_pts + eps)) * \
+                torch.sum(p * torch.min(d_matrix, 1)[0])
+            d_div_p = torch.min((d_matrix + eps) /
+                                (p_replicated**alpha + eps / self.max_dist), 0)[0]
+            d_div_p = torch.clamp(d_div_p, 0, self.max_dist)
+            term_2 = torch.mean(d_div_p, 0)
+
+            # terms_1[b] = term_1
+            # terms_2[b] = term_2
+            terms_1.append(term_1)
+            terms_2.append(term_2)
+
+        terms_1 = torch.stack(terms_1)
+        terms_2 = torch.stack(terms_2)
+
+        if self.return_2_terms:
+            res = terms_1.mean(), terms_2.mean()
+        else:
+            res = terms_1.mean() + terms_2.mean()
+
+        return res

@@ -84,7 +84,7 @@ class DataLoader_riteyes(Dataset):
     def __getitem__(self, idx):
         '''
         Reads in an image and all the required sources of information.
-        Also returns a flag tensor where a 1 in:
+        Also returns a flag tensor where a 0 in:
             pos 0: indicates pupil center exists
             pos 1: indicates mask exists
             pos 2: indicates pupil ellipse exists

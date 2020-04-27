@@ -518,6 +518,24 @@ def soft_heaviside(x, sc, mode):
     else:
         print('Mode undefined')
 
+def _assert_no_grad(variables):
+    for var in variables:
+        assert not var.requires_grad, \
+            "nn criterions don't compute the gradient w.r.t. targets - please " \
+            "mark these variables as volatile or not requiring gradients"
+
+def cdist(x, y):
+    '''
+    Input: x is a Nxd Tensor
+           y is a Mxd Tensor
+    Output: dist is a NxM matrix where dist[i,j] is the norm
+           between x[i,:] and y[j,:]
+    i.e. dist[i,j] = ||x[i,:]-y[j,:]||
+    '''
+    differences = x.unsqueeze(1) - y.unsqueeze(0)
+    distances = torch.sum(differences**2, -1).sqrt()
+    return distances
+
 class regressionModule(torch.nn.Module):
     def __init__(self, sizes, opChannels=10):
         super(regressionModule, self).__init__()
