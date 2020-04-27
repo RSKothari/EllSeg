@@ -103,6 +103,7 @@ def get_seg2ptLoss(op, gtPts, temperature):
     # op: BXHXW - single channel corresponding to pupil
     B, H, W = op.shape
     wtMap = F.softmax(op.view(B, -1)*temperature, dim=1) # [B, HXW]
+    stdLoss = torch.mean(torch.std(wtMap, dim=1)) # Unsupervised loss: Reduce STD
 
     XYgrid = create_meshgrid(H, W, normalized_coordinates=True) # 1xHxWx2
 
@@ -114,7 +115,7 @@ def get_seg2ptLoss(op, gtPts, temperature):
     predPts = torch.stack([xpos, ypos], dim=1).squeeze()
 
     loss = F.l1_loss(predPts, gtPts, reduction='mean')
-    return loss, predPts
+    return loss+stdLoss, predPts
 
 def get_segLoss(op, target, spatWts, distMap, cond, alpha):
     # Custom function to iteratively go over each sample in a batch and
