@@ -124,8 +124,11 @@ def get_segLoss(op, target, spatWts, distMap, cond, alpha):
     for i in range(0, B):
         if cond[i] == 0:
             # Valid mask exists
-            l_sl = SurfaceLoss(op[i, ...].unsqueeze(0), distMap[i, ...].unsqueeze(0))
-            l_cE = wCE(op[i, ...], target[i, ...], spatWts[i, ...])
+            l_sl = SurfaceLoss(op[i, ...].unsqueeze(0),
+                               distMap[i, ...].unsqueeze(0))
+            l_cE = wCE(op[i, ...],
+                       target[i, ...],
+                       spatWts[i, ...])
             l_gD = GDiceLoss(op[i, ...].unsqueeze(0),
                              target[i, ...].unsqueeze(0),
                              F.softmax)
@@ -135,16 +138,16 @@ def get_segLoss(op, target, spatWts, distMap, cond, alpha):
     else:
         return 0.0
 
-def get_ptLoss(pred_c, pupil_center, cond):
+def get_ptLoss(ip_vector, target_vector, cond):
     # Custom function to iteratively find L1 distance over valid samples
     # Note, pupil centers are assumed to be normalized between -1 and 1
-    B = pred_c.shape[0]
+    B = ip_vector.shape[0]
     loss_pt = []
     for i in range(0, B):
         if cond[i] == 0:
-            # Valid pupil center
-            loss_pt.append(F.l1_loss(pred_c[i, ...],
-                                     pupil_center[i, ...]))
+            # Valid entry
+            loss_pt.append(F.l1_loss(ip_vector[i, ...],
+                                     target_vector[i, ...]))
     if len(loss_pt) > 0:
         return torch.sum(torch.stack(loss_pt))/torch.sum(1-cond)
     else:

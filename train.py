@@ -312,7 +312,10 @@ if __name__ == '__main__':
         stateDict = model.state_dict() if not args.useMultiGPU else model.module.state_dict()
         netDict['state_dict'] = {k: v for k, v in stateDict.items() if 'dsIdentify_lin' not in k}
 
-        scoreTracker = np.mean(ious) + 2 - 2.5e-3*(np.nanmean(pup_c_lat_dists) + np.nanmean(pup_c_seg_dists)) # Max value 3
+        if not np.isnan(np.mean(ious)):
+            scoreTracker = np.mean(ious) + 2 - 2.5e-3*(np.nanmean(pup_c_lat_dists) + np.nanmean(pup_c_seg_dists)) # Max value 3
+        else:
+            scoreTracker = 2 - 2.5e-3*(np.nanmean(pup_c_lat_dists) + np.nanmean(pup_c_seg_dists)) # Max value 2
         scheduler.step(scoreTracker)
         early_stopping(scoreTracker, netDict)
 
