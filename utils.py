@@ -525,29 +525,39 @@ class regressionModule(torch.nn.Module):
         self.max_pool = nn.AvgPool2d(kernel_size=2)
 
         self.c1 = nn.Conv2d(in_channels=inChannels,
-                            out_channels=inChannels,
+                            out_channels=256,
+                            bias=True,
+                            kernel_size=(2,3))
+
+        self.c2 = nn.Conv2d(in_channels=256,
+                            out_channels=256,
                             bias=True,
                             kernel_size=3)
 
-        self.c2 = nn.Conv2d(in_channels=inChannels,
-                            out_channels=inChannels,
-                            bias=True,
-                            kernel_size=3)
-
-        self.c3 = nn.Conv2d(in_channels=inChannels,
-                            out_channels=16,
-                            kernel_size=1,
+        self.c3 = nn.Conv2d(in_channels=256,
+                            out_channels=32,
+                            kernel_size=3,
                             bias=False)
 
-        self.l1 = nn.Linear(16*5*7, 512, bias=True)
+        self.l1 = nn.Linear(32*3*5, 512, bias=True)
         self.l2 = nn.Linear(512, 10, bias=True)
     def forward(self, x):
         B = x.shape[0]
         # x: [B, 192, H/16, W/16]
-        x = F.pad(x, (0,0,0,1)) # [B, 192, 16, 20]
-        x = self.max_pool(F.leaky_relu(self.c1(x))) # [B, 192, 7, 9]
-        x = self.c3(F.leaky_relu(self.c2(x))) # [B, 16, 5, 7]
+        x = torch.selu(self.c1(x)) # [B, 256, 14, 18]
+        x = self.max_pool(x) # [B, 256, 7, 9]
+        x = torch.selu(self.c2(x)) # [B, 256, 5, 7]
+        x = torch.selu(self.c3(x)) # [B, 32, 3, 5]
         x = x.reshape(B, -1)
-        x = self.l1(x)
-        x = self.l2(x)
-        return x
+        x = self.l2(torch.selu(self.l1(x)))
+        pup_param = x[:, 0:4]
+        pup_angle = x[:, 4]
+        iri_param = x[:, 5:9]
+        iri_angle = x[:, 9]
+        op = torch.cat([torch.sigmoid(pup_param),
+                        pup_angle.unsqueeze(1),
+                        torch.sigmoid(iri_param),
+                        iri_angle.unsqueeze(1)], dim=1)
+        #x[:, 0:4].clamp_(-1., 1.)  # Do not normalize angle
+        #x[:, 5:9].clamp_(-1., 1.)  # Do not normalize angle
+        return op

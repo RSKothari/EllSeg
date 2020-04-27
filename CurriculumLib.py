@@ -66,7 +66,7 @@ class DataLoader_riteyes(Dataset):
             self.imList = self.imList[loc, :]
 
     def scaleFn(self, img, label, elParam, pupil_center):
-        dsize = (int(0.5*img.shape[1]), int(0.5*img.shape[0]))
+        dsize = (int(self.scale*img.shape[1]), int(self.scale*img.shape[0]))
         H = np.array([[self.scale, 0, 0],
                       [0, self.scale, 0],
                       [0, 0, 1]])
