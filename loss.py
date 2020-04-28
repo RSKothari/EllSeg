@@ -255,8 +255,7 @@ def selfCorr_seg2el(opSeg, opEl, dims):
 class WeightedHausdorffDistance(nn.Module):
     def __init__(self,
                  resized_height, resized_width,
-                 return_2_terms=False,
-                 device=torch.device('cpu')):
+                 return_2_terms=False):
         """
         :param resized_height: Number of rows in the image.
         :param resized_width: Number of columns in the image.
@@ -271,14 +270,11 @@ class WeightedHausdorffDistance(nn.Module):
         self.height, self.width = resized_height, resized_width
         self.resized_size = torch.tensor([resized_height,
                                           resized_width],
-                                         dtype=torch.get_default_dtype(),
-                                         device=device)
+                                          dtype=torch.float32)
         self.max_dist = np.sqrt(resized_height**2 + resized_width**2)
         self.n_pixels = resized_height * resized_width
         self.all_img_locations = torch.from_numpy(cartesian([np.arange(resized_height),
-                                                             np.arange(resized_width)]))
-        # Convert to appropiate type
-        self.all_img_locations = torch.clone(self.all_img_locations).to(device)
+                                                             np.arange(resized_width)])).to(torch.float32)
 
         self.return_2_terms = return_2_terms
 
@@ -313,9 +309,12 @@ class WeightedHausdorffDistance(nn.Module):
 
         batch_size = prob_map.shape[0]
         assert batch_size == gt.shape[0]
+        self.all_img_locations = self.all_img_locations.to(prob_map.device)
+        self.resized_size = self.resized_size.to(prob_map.device)
 
         terms_1 = []
         terms_2 = []
+
         for b in range(batch_size):
 
             # One by one
