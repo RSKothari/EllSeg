@@ -11,93 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from sklearn.utils.extmath import cartesian
 
-from utils import create_meshgrid, soft_heaviside, _assert_no_grad, cdist
-
-'''
-def get_allLoss(op,
-                op_hmaps,
-                elOut, # Network outputs
-                target, # Segmentation targets
-                pupil_center, # Pupil center
-                hMaps,
-                elPts, # Ellipse points
-                elNorm,
-                elPhi,
-                spatWts,
-                distMap,
-                cond,
-                ID,
-                alpha):
-
-    B, C, H, W = op.shape
-    pred_c = elOut[:, 5:7]
-
-    # Normalize output heatmap. Iris first policy.
-    hmaps_iri = op_hmaps[:, :8, ...]
-    hmaps_pup = op_hmaps[:, 8:, ...]
-    #hmaps_iri = F.log_softmax(op_hmaps[:, :8, ...].view(B, 8, -1), dim=2)
-    #hmaps_pup = F.log_softmax(op_hmaps[:, 8:, ...].view(B, 8, -1), dim=2)
-    #hmaps_iri = hmaps_iri.view(B, 8, H, W)
-    #hmaps_pup = hmaps_pup.view(B, 8, H, W)
-
-    # Segmentation loss
-    l_seg = get_segLoss(op, target, spatWts, distMap, cond, alpha)
-
-    # KL: loss
-    #l_map_iri = F.kl_div(hmaps_iri, hMaps[:, 0, ...], reduction='batchmean')
-    #l_map_pup = F.kl_div(hmaps_pup, hMaps[:, 1, ...], reduction='batchmean')
-    l_map_iri = F.l1_loss(hmaps_iri, hMaps[:, 0, ...])
-    l_map_pup = F.l1_loss(hmaps_pup, hMaps[:, 1, ...])
-    l_map = l_map_iri + l_map_pup
-
-    # Soft argmax
-    temp = spatial_softmax_2d(op_hmaps, torch.tensor(50.0))
-    pred_lmrks = spatial_softargmax_2d(temp, normalized_coordinates=True)
-    iris_lmrks = pred_lmrks[:, :8, :]
-    pupil_lmrks = pred_lmrks[:, 8:, :]
-
-    # Compute landmark based losses
-    l_pt = get_ptLoss(pred_c, normPts(pupil_center, target.shape[1:]), cond[:, 0])
-
-    l_lmrks_iri = get_ptLoss(iris_lmrks, elPts[:, 0, ...], cond[:, 1])
-    l_lmrks_pup = get_ptLoss(pupil_lmrks, elPts[:, 1, ...], cond[:, 1])
-    l_lmrks = l_lmrks_iri + l_lmrks_pup
-
-    # Compute seg losses
-    l_seg2pt, pred_c_seg = get_seg2ptLoss(op[:, 2, ...],
-                                          normPts(pupil_center,
-                                                  target.shape[1:]), 1)
-
-    if alpha > 0.5:
-        # Enforce ellipse consistency loss
-        iris_center = iris_lmrks.mean(dim=1)
-        iris_fit = ElliFit(iris_lmrks, iris_center) # Pupil fit
-        pupil_fit = ElliFit(pupil_lmrks, pred_c_seg) # Iris fit
-        l_fits = get_ptLoss(iris_fit, elPhi[:, 0, :], cond[:, 1]) + \
-                 get_ptLoss(pupil_fit, elPhi[:, 1, :], cond[:, 1])
-    else:
-        l_fits= 0.0
-        iris_fit = -torch.ones(B, 5)
-        pupil_fit = -torch.ones(B, 5)
-
-    # Compute ellipse losses - F1 loss for valid samples
-    l_ellipse = get_ptLoss(elOut, elNorm.view(-1, 10), cond[:, 1])
-
-    print('l_map: {}. l_lmrks: {}. l_ellipse: {}. l_seg2pt: {}. l_pt: {}. l_seg: {}'.format(
-        l_map.item(),
-        l_lmrks.item(),
-        l_ellipse.item(),
-        l_seg2pt.item(),
-        l_pt.item(),
-        l_seg.item()))
-
-    return (l_map + l_lmrks + l_fits + l_ellipse + l_seg2pt + l_pt + 20*l_seg,
-            pred_c_seg,
-            torch.stack([hmaps_iri,
-                         hmaps_pup], dim=1),
-            torch.stack([iris_fit,
-                         pupil_fit], dim=1))
-'''
+from utils import create_meshgrid, soft_heaviside, _assert_no_grad, cdist, generaliz_mean
 
 def get_seg2ptLoss(op, gtPts, temperature):
     # Custom function to find the pupilary center of mass to detected pupil
@@ -255,16 +169,18 @@ def selfCorr_seg2el(opSeg, opEl, dims):
 class WeightedHausdorffDistance(nn.Module):
     def __init__(self,
                  resized_height, resized_width,
+                 p=-9,
                  return_2_terms=False):
         """
         :param resized_height: Number of rows in the image.
         :param resized_width: Number of columns in the image.
+        :param p: Exponent in the generalized mean. -inf makes it the minimum.
         :param return_2_terms: Whether to return the 2 terms
                                of the WHD instead of their sum.
                                Default: False.
         :param device: Device where all Tensors will reside.
         """
-        super(WeightedHausdorffDistance, self).__init__()
+        super(nn.Module, self).__init__()
 
         # Prepare all possible (row, col) locations in the image
         self.height, self.width = resized_height, resized_width
@@ -274,14 +190,17 @@ class WeightedHausdorffDistance(nn.Module):
         self.max_dist = np.sqrt(resized_height**2 + resized_width**2)
         self.n_pixels = resized_height * resized_width
         self.all_img_locations = torch.from_numpy(cartesian([np.arange(resized_height),
-                                                             np.arange(resized_width)])).to(torch.float32)
+                                                             np.arange(resized_width)]))
+        # Convert to appropiate type
+        self.all_img_locations = self.all_img_locations.to(dtype=torch.float32)
 
         self.return_2_terms = return_2_terms
+        self.p = p
 
     def forward(self, prob_map, gt, orig_sizes):
         """
         Compute the Weighted Hausdorff Distance function
-         between the estimated probability map and ground truth points.
+        between the estimated probability map and ground truth points.
         The output is the WHD averaged through all the batch.
 
         :param prob_map: (B x H x W) Tensor of the probability map of the estimation.
@@ -291,9 +210,12 @@ class WeightedHausdorffDistance(nn.Module):
                    Must be of size B as in prob_map.
                    Each element in the list must be a 2D Tensor,
                    where each row is the (y, x), i.e, (row, col) of a GT point.
-        :param orig_sizes: Bx2 Tensor containing the size of the original images.
-                           B is batch size. The size must be in (height, width) format.
-        :param orig_widths: List of the original width for each image in the batch.
+        :param orig_sizes: Bx2 Tensor containing the size
+                           of the original images.
+                           B is batch size.
+                           The size must be in (height, width) format.
+        :param orig_widths: List of the original widths for each image
+                            in the batch.
         :return: Single-scalar Tensor with the Weighted Hausdorff Distance.
                  If self.return_2_terms=True, then return a tuple containing
                  the two terms of the Weighted Hausdorff Distance.
@@ -309,19 +231,27 @@ class WeightedHausdorffDistance(nn.Module):
 
         batch_size = prob_map.shape[0]
         assert batch_size == gt.shape[0]
-        self.all_img_locations = self.all_img_locations.to(prob_map.device)
-        self.resized_size = self.resized_size.to(prob_map.device)
 
+        self.all_img_locations = self.all_img_locations.to(prob_map.device)
+        self.resized_size = self.all_img_locations.to(prob_map.device)
         terms_1 = []
         terms_2 = []
-
         for b in range(batch_size):
 
             # One by one
             prob_map_b = prob_map[b, :, :]
-            gt_b = gt[b, ...]
+            gt_b = gt[b, :].unsqueeze(0) # Ensure point is [1, 2]
             orig_size_b = orig_sizes[b, :]
             norm_factor = (orig_size_b/self.resized_size).unsqueeze(0)
+            n_gt_pts = gt_b.size()[0]
+
+            # Corner case: no GT points
+            if gt_b.ndimension() == 1 and (gt_b < 0).all().item() == 0:
+                terms_1.append(torch.tensor([0],
+                                            dtype=torch.get_default_dtype()))
+                terms_2.append(torch.tensor([self.max_dist],
+                                            dtype=torch.get_default_dtype()))
+                continue
 
             # Pairwise distances between all possible locations and the GTed locations
             n_gt_pts = gt_b.size()[0]
@@ -335,16 +265,13 @@ class WeightedHausdorffDistance(nn.Module):
             n_est_pts = p.sum()
             p_replicated = p.view(-1, 1).repeat(1, n_gt_pts)
 
-            eps = 1e-6
-            alpha = 4
-
             # Weighted Hausdorff Distance
-            term_1 = (1 / (n_est_pts + eps)) * \
-                torch.sum(p * torch.min(d_matrix, 1)[0])
-            d_div_p = torch.min((d_matrix + eps) /
-                                (p_replicated**alpha + eps / self.max_dist), 0)[0]
-            d_div_p = torch.clamp(d_div_p, 0, self.max_dist)
-            term_2 = torch.mean(d_div_p, 0)
+            term_1 = (1/(n_est_pts+1e-6))*torch.sum(p * torch.min(d_matrix, 1)[0])
+            weighted_d_matrix = (1 - p_replicated)*self.max_dist + p_replicated*d_matrix
+            minn = generaliz_mean(weighted_d_matrix,
+                                  p=self.p,
+                                  dim=0, keepdim=False)
+            term_2 = torch.mean(minn)
 
             # terms_1[b] = term_1
             # terms_2[b] = term_2

@@ -183,7 +183,7 @@ class DenseNet2D(nn.Module):
         self.disentangle_alpha = 2
 
         self.klLoss = torch.nn.KLDivLoss()
-        self.wHauss = WeightedHausdorffDistance(240, 320, return_2_terms=False, device=torch.device("cuda"))
+        self.wHauss = WeightedHausdorffDistance(240., 320., return_2_terms=False)
 
         self.enc = DenseNet_encoder(in_c=1, chz=chz, actfunc=actfunc, growth=growth, norm=norm)
         self.dec = DenseNet_decoder(chz=chz, out_c=3, actfunc=actfunc, growth=growth, norm=norm)
@@ -223,9 +223,9 @@ class DenseNet2D(nn.Module):
         op = self.dec(x4, x3, x2, x1, x)
         pred_c = elOut[:, 5:7] # Columns 5 & 6 correspond to pupil center
 
-        dsizes = torch.from_numpy(np.stack([[H]*B, [W]*B], axis=1)).cuda()
-        pupMap = op[:, -1, ...]
-        pupMap = torch.sigmoid(pupMap.view(B, -1)).view(B, H, W)
+        dsizes = torch.from_numpy(np.stack([[H/1.]*B, [W/1.]*B], axis=1)).to(x.device)
+        pupMap = torch.softmax(op, dim=1)[:, -1, ...] # Softmax'ed channel
+        pupMap = pupMap.view(B, -1).view(B, H, W)
 
         # wHauss expects GT as rows and cols
         loss_seg2pt = self.wHauss(pupMap, pupil_center[:, [1, 0]], dsizes)

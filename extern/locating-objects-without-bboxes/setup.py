@@ -2,14 +2,14 @@ from setuptools import setup, find_packages
 
 setup(
     name='object-locator',
-    version='1.3.1',
-    description='Object Location using PyTorch (inference/testing only).',
+    version='1.6.0',
+    description='Object Location using PyTorch.',
 
     # The project's main homepage.
     url='https://engineering.purdue.edu/~sorghum',
 
     # Author details
-    author='Javier Ribera, Yuhao Chen, and Edward Delp',
+    author='Javier Ribera, David Guera, Yuhao Chen, and Edward J. Delp',
     author_email='ace@ecn.purdue.edu',
     # See https://pypi.python.org/pypi?%3Aaction=list_classifiers
     classifiers=[

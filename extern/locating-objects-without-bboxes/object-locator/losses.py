@@ -1,3 +1,20 @@
+__copyright__ = \
+"""
+Copyright &copyright © (c) 2019 The Board of Trustees of Purdue University and the Purdue Research Foundation.
+All rights reserved.
+
+This software is covered by US patents and copyright.
+This source code is to be used for academic research purposes only, and no commercial use is allowed.
+
+For any questions, please contact Edward J. Delp (ace@ecn.purdue.edu) at Purdue University.
+
+Last Modified: 10/02/2019 
+"""
+__license__ = "CC BY-NC-SA 4.0"
+__authors__ = "Javier Ribera, David Guera, Yuhao Chen, Edward J. Delp"
+__version__ = "1.6.0"
+
+
 import math
 import torch
 from sklearn.utils.extmath import cartesian
@@ -23,13 +40,14 @@ def _assert_no_grad(variables):
 
 
 def cdist(x, y):
-    '''
-    Input: x is a Nxd Tensor
-           y is a Mxd Tensor
-    Output: dist is a NxM matrix where dist[i,j] is the norm
-           between x[i,:] and y[j,:]
-    i.e. dist[i,j] = ||x[i,:]-y[j,:]||
-    '''
+    """
+    Compute distance between each pair of the two collections of inputs.
+    :param x: Nxd Tensor
+    :param y: Mxd Tensor
+    :res: NxM matrix where dist[i,j] is the norm between x[i,:] and y[j,:],
+          i.e. dist[i,j] = ||x[i,:]-y[j,:]||
+
+    """
     differences = x.unsqueeze(1) - y.unsqueeze(0)
     distances = torch.sum(differences**2, -1).sqrt()
     return distances
@@ -38,8 +56,8 @@ def cdist(x, y):
 def averaged_hausdorff_distance(set1, set2, max_ahd=np.inf):
     """
     Compute the Averaged Hausdorff Distance function
-     between two unordered sets of points (the function is symmetric).
-     Batches are not supported, so squeeze your inputs first!
+    between two unordered sets of points (the function is symmetric).
+    Batches are not supported, so squeeze your inputs first!
     :param set1: Array/list where each row/element is an N-dimensional point.
     :param set2: Array/list where each row/element is an N-dimensional point.
     :param max_ahd: Maximum AHD possible to return if any set is empty. Default: inf.
@@ -74,8 +92,8 @@ class AveragedHausdorffLoss(nn.Module):
     def forward(self, set1, set2):
         """
         Compute the Averaged Hausdorff Distance function
-         between two unordered sets of points (the function is symmetric).
-         Batches are not supported, so squeeze your inputs first!
+        between two unordered sets of points (the function is symmetric).
+        Batches are not supported, so squeeze your inputs first!
         :param set1: Tensor where each row is an N-dimensional point.
         :param set2: Tensor where each row is an N-dimensional point.
         :return: The Averaged Hausdorff Distance between set1 and set2.
@@ -102,11 +120,13 @@ class AveragedHausdorffLoss(nn.Module):
 class WeightedHausdorffDistance(nn.Module):
     def __init__(self,
                  resized_height, resized_width,
+                 p=-9,
                  return_2_terms=False,
                  device=torch.device('cpu')):
         """
         :param resized_height: Number of rows in the image.
         :param resized_width: Number of columns in the image.
+        :param p: Exponent in the generalized mean. -inf makes it the minimum.
         :param return_2_terms: Whether to return the 2 terms
                                of the WHD instead of their sum.
                                Default: False.
@@ -125,15 +145,16 @@ class WeightedHausdorffDistance(nn.Module):
         self.all_img_locations = torch.from_numpy(cartesian([np.arange(resized_height),
                                                              np.arange(resized_width)]))
         # Convert to appropiate type
-        self.all_img_locations = torch.tensor(self.all_img_locations,
-                                              dtype=torch.get_default_dtype()).to(device)
+        self.all_img_locations = self.all_img_locations.to(device=device,
+                                                           dtype=torch.get_default_dtype())
 
         self.return_2_terms = return_2_terms
+        self.p = p
 
     def forward(self, prob_map, gt, orig_sizes):
         """
         Compute the Weighted Hausdorff Distance function
-         between the estimated probability map and ground truth points.
+        between the estimated probability map and ground truth points.
         The output is the WHD averaged through all the batch.
 
         :param prob_map: (B x H x W) Tensor of the probability map of the estimation.
@@ -143,12 +164,15 @@ class WeightedHausdorffDistance(nn.Module):
                    Must be of size B as in prob_map.
                    Each element in the list must be a 2D Tensor,
                    where each row is the (y, x), i.e, (row, col) of a GT point.
-        :param orig_sizes: Bx2 Tensor containing the size of the original images.
-                           B is batch size. The size must be in (height, width) format.
-        :param orig_widths: List of the original width for each image in the batch.
+        :param orig_sizes: Bx2 Tensor containing the size
+                           of the original images.
+                           B is batch size.
+                           The size must be in (height, width) format.
+        :param orig_widths: List of the original widths for each image
+                            in the batch.
         :return: Single-scalar Tensor with the Weighted Hausdorff Distance.
                  If self.return_2_terms=True, then return a tuple containing
-                 the two terms of the Weighted Hausdorff Distance. 
+                 the two terms of the Weighted Hausdorff Distance.
         """
 
         _assert_no_grad(gt)
@@ -171,6 +195,15 @@ class WeightedHausdorffDistance(nn.Module):
             gt_b = gt[b]
             orig_size_b = orig_sizes[b, :]
             norm_factor = (orig_size_b/self.resized_size).unsqueeze(0)
+            n_gt_pts = gt_b.size()[0]
+
+            # Corner case: no GT points
+            if gt_b.ndimension() == 1 and (gt_b < 0).all().item() == 0:
+                terms_1.append(torch.tensor([0],
+                                            dtype=torch.get_default_dtype()))
+                terms_2.append(torch.tensor([self.max_dist],
+                                            dtype=torch.get_default_dtype()))
+                continue
 
             # Pairwise distances between all possible locations and the GTed locations
             n_gt_pts = gt_b.size()[0]
@@ -185,16 +218,14 @@ class WeightedHausdorffDistance(nn.Module):
             n_est_pts = p.sum()
             p_replicated = p.view(-1, 1).repeat(1, n_gt_pts)
 
-            eps = 1e-6
-            alpha = 4
-
             # Weighted Hausdorff Distance
-            term_1 = (1 / (n_est_pts + eps)) * \
+            term_1 = (1 / (n_est_pts + 1e-6)) * \
                 torch.sum(p * torch.min(d_matrix, 1)[0])
-            d_div_p = torch.min((d_matrix + eps) /
-                                (p_replicated**alpha + eps / self.max_dist), 0)[0]
-            d_div_p = torch.clamp(d_div_p, 0, self.max_dist)
-            term_2 = torch.mean(d_div_p, 0)
+            weighted_d_matrix = (1 - p_replicated)*self.max_dist + p_replicated*d_matrix
+            minn = generaliz_mean(weighted_d_matrix,
+                                  p=self.p,
+                                  dim=0, keepdim=False)
+            term_2 = torch.mean(minn)
 
             # terms_1[b] = term_1
             # terms_2[b] = term_2
@@ -210,3 +241,44 @@ class WeightedHausdorffDistance(nn.Module):
             res = terms_1.mean() + terms_2.mean()
 
         return res
+
+
+def generaliz_mean(tensor, dim, p=-9, keepdim=False):
+    # """
+    # Computes the softmin along some axes.
+    # Softmin is the same as -softmax(-x), i.e,
+    # softmin(x) = -log(sum_i(exp(-x_i)))
+
+    # The smoothness of the operator is controlled with k:
+    # softmin(x) = -log(sum_i(exp(-k*x_i)))/k
+
+    # :param input: Tensor of any dimension.
+    # :param dim: (int or tuple of ints) The dimension or dimensions to reduce.
+    # :param keepdim: (bool) Whether the output tensor has dim retained or not.
+    # :param k: (float>0) How similar softmin is to min (the lower the more smooth).
+    # """
+    # return -torch.log(torch.sum(torch.exp(-k*input), dim, keepdim))/k
+    """
+    The generalized mean. It corresponds to the minimum when p = -inf.
+    https://en.wikipedia.org/wiki/Generalized_mean
+    :param tensor: Tensor of any dimension.
+    :param dim: (int or tuple of ints) The dimension or dimensions to reduce.
+    :param keepdim: (bool) Whether the output tensor has dim retained or not.
+    :param p: (float<0).
+    """
+    assert p < 0
+    res= torch.mean((tensor + 1e-6)**p, dim, keepdim=keepdim)**(1./p)
+    return res
+
+
+"""
+Copyright &copyright © (c) 2019 The Board of Trustees of Purdue University and the Purdue Research Foundation.
+All rights reserved.
+
+This software is covered by US patents and copyright.
+This source code is to be used for academic research purposes only, and no commercial use is allowed.
+
+For any questions, please contact Edward J. Delp (ace@ecn.purdue.edu) at Purdue University.
+
+Last Modified: 10/02/2019 
+"""

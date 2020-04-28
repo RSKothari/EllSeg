@@ -536,6 +536,33 @@ def cdist(x, y):
     distances = torch.sum(differences**2, -1).sqrt()
     return distances
 
+def generaliz_mean(tensor, dim, p=-9, keepdim=False):
+    # """
+    # Computes the softmin along some axes.
+    # Softmin is the same as -softmax(-x), i.e,
+    # softmin(x) = -log(sum_i(exp(-x_i)))
+
+    # The smoothness of the operator is controlled with k:
+    # softmin(x) = -log(sum_i(exp(-k*x_i)))/k
+
+    # :param input: Tensor of any dimension.
+    # :param dim: (int or tuple of ints) The dimension or dimensions to reduce.
+    # :param keepdim: (bool) Whether the output tensor has dim retained or not.
+    # :param k: (float>0) How similar softmin is to min (the lower the more smooth).
+    # """
+    # return -torch.log(torch.sum(torch.exp(-k*input), dim, keepdim))/k
+    """
+    The generalized mean. It corresponds to the minimum when p = -inf.
+    https://en.wikipedia.org/wiki/Generalized_mean
+    :param tensor: Tensor of any dimension.
+    :param dim: (int or tuple of ints) The dimension or dimensions to reduce.
+    :param keepdim: (bool) Whether the output tensor has dim retained or not.
+    :param p: (float<0).
+    """
+    assert p < 0
+    res= torch.mean((tensor + 1e-6)**p, dim, keepdim=keepdim)**(1./p)
+    return res
+
 class regressionModule(torch.nn.Module):
     def __init__(self, sizes, opChannels=10):
         super(regressionModule, self).__init__()
