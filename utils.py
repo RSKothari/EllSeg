@@ -647,7 +647,11 @@ class regressionModule(torch.nn.Module):
 
         self.l1 = nn.Linear(32*3*5, 512, bias=True)
         self.l2 = nn.Linear(512, 10, bias=True)
-    def forward(self, x):
+
+        self.c_actfunc = torch.tanh # Center has to be between -1 and 1
+        self.param_actfunc = torch.sigmoid # Parameters can't be negative and capped to 1
+
+    def forward(self, x, alpha):
         B = x.shape[0]
         # x: [B, 192, H/16, W/16]
         x = torch.selu(self.c1(x)) # [B, 256, 14, 18]
@@ -656,14 +660,26 @@ class regressionModule(torch.nn.Module):
         x = torch.selu(self.c3(x)) # [B, 32, 3, 5]
         x = x.reshape(B, -1)
         x = self.l2(torch.selu(self.l1(x)))
-        pup_param = x[:, 0:4]
-        pup_angle = x[:, 4]
-        iri_param = x[:, 5:9]
-        iri_angle = x[:, 9]
-        op = torch.cat([torch.sigmoid(pup_param),
+        if alpha < 0.5:
+            pup_c = self.c_actfunc(x[:, 0:2])
+            pup_param = self.param_actfunc(x[:, 2:4])
+            pup_angle = x[:, 4]
+            iri_c = self.c_actfunc(x[:, 5:7])
+            iri_param = self.param_actfunc(x[:, 7:9])
+            iri_angle = x[:, 9]
+        else:
+            # If alpha>0.5, donot use preset activations, use hardtanh
+            pup_c = F.hardtanh(x[:, 0:2])
+            pup_param = F.hardtanh(x[:, 2:4])
+            pup_angle = x[:, 4]
+            iri_c = F.hardtanh(x[:, 5:7])
+            iri_param = F.hardtanh(x[:, 7:9])
+            iri_angle = x[:, 9]
+
+        op = torch.cat([pup_c,
+                        pup_param,
                         pup_angle.unsqueeze(1),
-                        torch.sigmoid(iri_param),
+                        iri_c,
+                        iri_param,
                         iri_angle.unsqueeze(1)], dim=1)
-        #x[:, 0:4].clamp_(-1., 1.)  # Do not normalize angle
-        #x[:, 5:9].clamp_(-1., 1.)  # Do not normalize angle
         return op

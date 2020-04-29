@@ -21,15 +21,15 @@ class encoding_block(nn.Module):
         self.relu = nn.ReLU()
         self.bn1 = torch.nn.BatchNorm2d(num_features=filters_num)
         self.bn2 = torch.nn.BatchNorm2d(num_features=filters_num*2)
-    
+
         self._initialize_weights()
-        
+
     def _initialize_weights(self):
         # Initialize layers exactly as in Keras
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.xavier_uniform_(m.weight, gain=nn.init.calculate_gain('relu'))
-    
+
     def forward(self, x):
         x=self.conv1(x)
         x=self.bn1(x)
@@ -53,13 +53,13 @@ class decoding_block(nn.Module):
         self._initialize_weights()
         self.up_sampling=up_sampling
         self.up_stride=up_stride
-        
+
     def _initialize_weights(self):
         # Initialize layers exactly as in Keras
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.xavier_uniform_(m.weight, gain=nn.init.calculate_gain('relu'))
-    
+
     def forward(self,prev_feature_map, x):
         if prev_feature_map is not None:
             print (x.shape, prev_feature_map.shape)
@@ -82,7 +82,7 @@ class decoding_block(nn.Module):
 class DeepVOG_pytorch(nn.Module):
     def __init__(self,in_channels=3,out_channels=3,filter_size=(3,3)):
         super(DeepVOG_pytorch, self).__init__()
-        
+
         self.output_channels=16
         self.down_block1 = encoding_block(input_channels=in_channels,filter_size=filter_size,\
                         filters_num=self.output_channels, layer_num=1, block_type='down', stage=1, s=1)
@@ -104,26 +104,26 @@ class DeepVOG_pytorch(nn.Module):
         self.up_block5 = decoding_block(skip_channels=self.output_channels,input_channels=self.output_channels*4,filter_size=filter_size,\
                         filters_num=self.output_channels*2, layer_num=1, block_type='up', stage=1, s=1)
     # Output layer operations
-        self.conv1 = nn.Conv2d(self.output_channels*2,3,kernel_size=(1,1),stride=(1,1),padding=(0,0)) #same        
+        self.conv1 = nn.Conv2d(self.output_channels*2,3,kernel_size=(1,1),stride=(1,1),padding=(0,0)) #same
         self._initialize_weights()
         self.softmax=nn.Softmax(dim=None)
-        
+
     def _initialize_weights(self):
         # Initialize layers exactly as in Keras
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.xavier_uniform_(m.weight, gain=nn.init.calculate_gain('relu'))
-                
+
     def forward(self,x):
         X_Jump1,self.x1 = self.down_block1(x)  ##32
         X_Jump2,self.x2 = self.down_block2(self.x1) ##64
         X_Jump3,self.x3 = self.down_block3(self.x2) ##128
-        X_Jump4,self.x4 = self.down_block4(self.x3) ##256 
+        X_Jump4,self.x4 = self.down_block4(self.x3) ##256
         self.x5 = self.up_block1(None,self.x4) ##256
         self.x6 = self.up_block2(X_Jump4,self.x5) ##128
         self.x7 = self.up_block3(X_Jump3,self.x6) ##64
         self.x8 = self.up_block4(X_Jump2,self.x7) ##32
         self.x9 = self.up_block5(X_Jump1,self.x8) ##32
         self.x=self.conv1(self.x9)
-        self.x=self.softmax(self.x)
-        return self.x
+        out=self.softmax(self.x)
+        return out

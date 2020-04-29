@@ -13,7 +13,7 @@ from sklearn.utils.extmath import cartesian
 
 from utils import create_meshgrid, soft_heaviside, _assert_no_grad, cdist, generaliz_mean
 
-def get_seg2ptLoss(op, gtPts, temperature):
+def get_seg2ptLoss(op, gtPts, temperature=1):
     # Custom function to find the pupilary center of mass to detected pupil
     # center
     # op: BXHXW - single channel corresponding to pupil
@@ -35,7 +35,7 @@ def get_seg2ptLoss(op, gtPts, temperature):
 def get_segLoss(op, target, spatWts, distMap, cond, alpha):
     # Custom function to iteratively go over each sample in a batch and
     # compute loss.
-    # cond: Mask exist -> 1
+    # cond: Mask exist -> 1, else 0
     B = op.shape[0]
     loss_seg = []
     for i in range(0, B):

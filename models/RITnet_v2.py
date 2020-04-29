@@ -218,7 +218,7 @@ class DenseNet2D(nn.Module):
         B, _, H, W = x.shape
         x4, x3, x2, x1, x = self.enc(x)
         latent = torch.mean(x.flatten(start_dim=2), -1) # [B, features]
-        elOut = self.elReg(x) # Linear regression to ellipse parameters
+        elOut = self.elReg(x, alpha) # Linear regression to ellipse parameters
         op = self.dec(x4, x3, x2, x1, x)
 
         #%% Weighted Hauss Loss
@@ -248,7 +248,7 @@ class DenseNet2D(nn.Module):
                             ID, # Image and dataset ID
                             alpha)
         loss, pred_c_seg = op_tup
-        loss += 0.01*loss_wHauss
+        loss += 5e-3*loss_wHauss
 
         if self.disentangle:
             pred_ds = self.dsIdentify_lin(latent)
@@ -303,28 +303,23 @@ def get_allLoss(op, # Network output
                 cond, # Condition matrix, 0 represents modality exists
                 ID,
                 alpha):
-    '''
-    op: Segmentation map output [B, 3, H, W]
-    op_hmaps: Output heatmaps [B, 16, H, W]
-    hMaps: Groundtruth heatmap [B, 16, H, W]
-    elPts: Points along pupil or iris ellipse [B, 2, 16, 2]
-    elPhi: Phi values from normalized ellipse equation
-    '''
-    B, C, H, W = op.shape
-    loc_onlyMask = ~(cond[:, 1].to(torch.bool)) # GT mask present (True means exist)
 
+    B, C, H, W = op.shape
+    loc_onlyMask = ~(cond[:, 1].to(torch.bool)) # GT mask present (True means mask exist)
+
+    # Groundtruth masks for Iris and Pupil
     pupMask = (target==2).to(torch.long)
     iriMask = ((target==1)+(target == 2)).to(torch.long)
 
     # Segmentation to Ellipse center loss using center of mass
     l_seg2pt_pup, pred_c_seg_pup = get_seg2ptLoss(op[:, 2, ...],
                                                   normPts(pupil_center,
-                                                          target.shape[1:]), 1)
+                                                          target.shape[1:]), temperature=1)
     if torch.sum(loc_onlyMask):
         # Iris center is only present when GT masks are present
         iriMap = op[loc_onlyMask, 1, ...] + op[loc_onlyMask, 2, ...]
         l_seg2pt_iri, pred_c_seg_iri = get_seg2ptLoss(iriMap,
-                                                      elNorm[loc_onlyMask, 0, :2], 1)
+                                                      elNorm[loc_onlyMask, 0, :2], temperature=1)
     else:
         # If GT map is absent, loss is set to 0.0
         l_seg2pt_iri = 0.0
@@ -332,7 +327,7 @@ def get_allLoss(op, # Network output
 
     pred_c_seg = torch.stack([pred_c_seg_iri,
                               pred_c_seg_pup], dim=1) # Iris first policy
-    l_seg2pt = l_seg2pt_pup +l_seg2pt_iri
+    l_seg2pt = 0.5*l_seg2pt_pup + 0.5*l_seg2pt_iri
 
     # Segmentation loss -> backbone loss
     l_seg = get_segLoss(op, target, spatWts, distMap, loc_onlyMask, alpha)
