@@ -270,7 +270,7 @@ class DenseNet2D(nn.Module):
             # No disentanglement, proceed regularly
             if self.selfCorr:
                 loss = loss + \
-                            get_ptLoss(pred_c_seg[:,1,...], elOut[:, 5:7], cond[:, 0]) +\
+                            get_ptLoss(pred_c_seg[:,1,...], elOut[:, 5:7], cond[:, 0]) + \
                                 get_ptLoss(pred_c_seg[:,0,...], elOut[:, 0:2], cond[:, 1])
 
         elPred = torch.cat([pred_c_seg[:, 0, :], elOut[:, 2:5],
@@ -313,8 +313,8 @@ def get_allLoss(op, # Network output
     B, C, H, W = op.shape
     loc_onlyMask = ~(cond[:, 1].to(torch.bool)) # GT mask present (True means exist)
 
-    pupMask = target==2
-    iriMask = (target==1)+(target == 2)
+    pupMask = (target==2).to(torch.long)
+    iriMask = ((target==1)+(target == 2)).to(torch.long)
 
     # Segmentation to Ellipse center loss using center of mass
     l_seg2pt_pup, pred_c_seg_pup = get_seg2ptLoss(op[:, 2, ...],
@@ -346,17 +346,17 @@ def get_allLoss(op, # Network output
     # using regressed values from encoder.
     elPred = torch.cat([pred_c_seg[:, 0, :], elOut[:, 2:5],
                         pred_c_seg[:, 1, :], elOut[:, 7:10]], dim=1) # Bx5
-   
-    l_seg2el = get_seg2elLoss(pupMask, elPred[:, 5:]) + get_seg2elLoss(iriMask, elPred[:, :5])
+
+    l_seg2el = get_seg2elLoss(iriMask, elPred[:, :5]) + get_seg2elLoss(pupMask, elPred[:, 5:])
 
     # Compute ellipse losses - F1 loss for valid samples
     l_ellipse = get_ptLoss(elOut, elNorm.view(-1, 10), loc_onlyMask)
-    
+
     print('Ellipse: {}. COM loss: {}. Seg loss: {}. Seg2El: {}'.format(l_ellipse.item(),
                                                                                     l_seg2pt.item(),
                                                                                     l_seg.item(),
                                                                                     l_seg2el.item()))
-    
-    total_loss = l_ellipse + 20*l_seg +10*l_pt + l_seg2pt+alpha*l_seg2el
+
+    total_loss = l_ellipse + 20*l_seg + 10*l_pt + l_seg2pt + alpha*l_seg2el
 
     return (total_loss, pred_c_seg)

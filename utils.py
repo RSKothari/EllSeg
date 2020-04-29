@@ -380,7 +380,7 @@ def lossandaccuracy(args, loader, model, alpha, device):
             pred_ab = elOut[:, 1, 2:4].cpu().detach()
             scale_pup = torch.sqrt(torch.sum(gt_ab**2, dim=1)/torch.sum(pred_ab**2, dim=1))
             scale_pup = torch.sum(scale_pup*~cond[:,1]).item()
-        
+
             predict = get_predictions(output)
             iou = getSeg_metrics(labels.numpy(),
                                  predict.numpy(),
@@ -529,15 +529,22 @@ def soft_heaviside(x, sc, mode):
     '''
     Given an input and a scaling factor (default 64), the soft heaviside
     function approximates the behavior of a 0 or 1 operation in a differentiable
-    manner.
+    manner. Note the max values in the heaviside function are scaled to 0.9.
+    This scaling is for convenience and stability with bCE loss.
     '''
     sc = torch.tensor([sc]).to(torch.float32).to(x.device)
     if mode==1:
+        # Original soft-heaviside
         # Try sc = 64
-        return 1/(1 + torch.exp(-sc/x))
+        return 0.9/(1 + torch.exp(-sc/x))
     elif mode==2:
+        # Some funky shit but has a nice gradient
         # Try sc = 0.001
-        return 0.5*(1 + (2/np.pi)*torch.atan2(x, sc))
+        return 0.45*(1 + (2/np.pi)*torch.atan2(x, sc))
+    elif mode==3:
+        # Good ol' scaled sigmoid. FUTURE: make sc free parameter
+        # Try sc = 8
+        return F.sigmoid(sc*x)
     else:
         print('Mode undefined')
 

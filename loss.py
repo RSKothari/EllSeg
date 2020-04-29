@@ -158,10 +158,11 @@ def get_seg2elLoss(opSeg, opEl):
         Y = -(mesh[..., 0] - opEl[i, 0])*torch.sin(opEl[i, -1]) + (mesh[..., 1] - opEl[i, 1])*torch.cos(opEl[i, -1])
         posmask = ((X/opEl[i, 2])**2 + (Y/opEl[i, 3])**2) - 1
         negmask = -posmask
-        posmask = soft_heaviside(posmask, sc=0.001, mode=2) # Positive outside the ellipse
-        negmask = soft_heaviside(negmask, sc=0.001, mode=2) # Positive inside the ellipse
-        mask = opSeg[i, ...]*posmask + (1 - opSeg[i, ...])*negmask# Higher overlap means more smaller the value
-        loss += torch.sum(mask)#/(np.sqrt(H**2 + W**2))
+        posmask = soft_heaviside(posmask, sc=8, mode=3) # Positive outside the ellipse
+        negmask = soft_heaviside(negmask, sc=8, mode=3) # Positive inside the ellipse
+        loss = F.binary_cross_entropy(posmask, 1-opSeg) + F.binary_cross_entropy(negmask, opSeg)
+        #mask = opSeg[i, ...]*posmask + (1 - opSeg[i, ...])*negmask# Higher overlap means more smaller the value
+        #loss += torch.sum(mask)#/(np.sqrt(H**2 + W**2))
     return loss/B
 
 class WeightedHausdorffDistance(nn.Module):
