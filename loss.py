@@ -51,7 +51,7 @@ def get_segLoss(op, target, spatWts, distMap, cond, alpha):
                              F.softmax)
             loss_seg.append(alpha*l_sl + (1-alpha)*l_gD + l_cE)
     if len(loss_seg) > 0:
-        return torch.sum(torch.stack(loss_seg))/torch.sum(1-cond)
+        return torch.sum(torch.stack(loss_seg))/torch.sum(cond.to(torch.float32))
     else:
         return 0.0
 
@@ -66,7 +66,7 @@ def get_ptLoss(ip_vector, target_vector, cond):
             loss_pt.append(F.l1_loss(ip_vector[i, ...],
                                      target_vector[i, ...]))
     if len(loss_pt) > 0:
-        return torch.sum(torch.stack(loss_pt))/torch.sum(1-cond)
+        return torch.sum(torch.stack(loss_pt))/torch.sum(cond.to(torch.float32))
     else:
         return 0.0
 
@@ -147,7 +147,8 @@ def get_seg2elLoss(opSeg, opEl):
     # opEl: Regressed Ellipse output [B, 5]
 
     loss = 0
-    B, C, H, W = opSeg.shape
+    B, H, W = opSeg.shape
+    opSeg = opSeg.to(torch.float32)
 
     mesh = create_meshgrid(H, W, normalized_coordinates=True).squeeze().cuda() # 1xHxWx2
     mesh.requires_grad = False
@@ -155,10 +156,12 @@ def get_seg2elLoss(opSeg, opEl):
     for i in range(0, B):
         X = (mesh[..., 0] - opEl[i, 0])*torch.cos(opEl[i, -1]) + (mesh[..., 1] - opEl[i, 1])*torch.sin(opEl[i, -1])
         Y = -(mesh[..., 0] - opEl[i, 0])*torch.sin(opEl[i, -1]) + (mesh[..., 1] - opEl[i, 1])*torch.cos(opEl[i, -1])
-        wtMat = ((X/opEl[i, 2])**2 + (Y/opEl[i, 3])**2) - 1
-        wtMat = soft_heaviside(wtMat, sc=0.001, mode=2) # Positive outside the ellipse
-        mask = opSeg*wtMat # Higher overlap means more smaller the value
-        loss += torch.sum(mask)/(H*W)
+        posmask = ((X/opEl[i, 2])**2 + (Y/opEl[i, 3])**2) - 1
+        negmask = -posmask
+        posmask = soft_heaviside(posmask, sc=0.001, mode=2) # Positive outside the ellipse
+        negmask = soft_heaviside(negmask, sc=0.001, mode=2) # Positive inside the ellipse
+        mask = opSeg[i, ...]*posmask + (1 - opSeg[i, ...])*negmask# Higher overlap means more smaller the value
+        loss += torch.sum(mask)#/(np.sqrt(H**2 + W**2))
     return loss/B
 
 class WeightedHausdorffDistance(nn.Module):

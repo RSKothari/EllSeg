@@ -32,7 +32,7 @@ if __name__ == '__main__':
 
     device=torch.device("cuda")
     torch.cuda.manual_seed(12)
-    if torch.cuda.device_count() > 1:
+    if False:#torch.cuda.device_count() > 1:
         print('Moving to a multiGPU setup.')
         args.useMultiGPU = True
     else:
@@ -211,8 +211,8 @@ if __name__ == '__main__':
             optimizer.step()
 
             # Predicted centers
-            pred_c_iri = elOut[:, 0, :2].detach().cpu().numpy()
-            pred_c_pup = elOut[:, 1, :2].detach().cpu().numpy()
+            pred_c_iri = elOut[:, 0:2].detach().cpu().numpy()
+            pred_c_pup = elOut[:, 5:7].detach().cpu().numpy()
 
             accLoss += loss.detach().cpu().item()
             predict = get_predictions(output)
@@ -236,16 +236,20 @@ if __name__ == '__main__':
 
             # Angular distance
             angDist_iri = getAng_metric(elNorm[:, 0, 4].numpy(),
-                                        elOut[:, 0, 4].detach().cpu().numpy(),
+                                        elOut[:, 4].detach().cpu().numpy(),
                                         cond[:, 1].numpy())[0]
             angDist_pup = getAng_metric(elNorm[:, 1, 4].numpy(),
-                                        elOut[:, 1, 4].detach().cpu().numpy(),
+                                        elOut[:, 9].detach().cpu().numpy(),
                                         cond[:, 1].numpy())[0]
 
             # Scale metric
-            scale_iri = torch.sqrt(torch.sum(elNorm[:, 0, 2:4]**2, dim=1)/torch.sum(elOut[:, 0, 2:4]**2, dim=1))
-            scale_pup = torch.sqrt(torch.sum(elNorm[:, 1, 2:4]**2, dim=1)/torch.sum(elOut[:, 1, 2:4]**2, dim=1))
+            gt_ab = elNorm[:, 0, 2:4]
+            pred_ab = elOut[:, 2:4].cpu().detach()
+            scale_iri = torch.sqrt(torch.sum(gt_ab**2, dim=1)/torch.sum(pred_ab**2, dim=1))
             scale_iri = torch.sum(scale_iri*~cond[:,1]).item()
+            gt_ab = elNorm[:, 1, 2:4]
+            pred_ab = elOut[:, 7:9].cpu().detach()
+            scale_pup = torch.sqrt(torch.sum(gt_ab**2, dim=1)/torch.sum(pred_ab**2, dim=1))
             scale_pup = torch.sum(scale_pup*~cond[:,1]).item()
 
             # Append to score dictionary
@@ -256,9 +260,9 @@ if __name__ == '__main__':
             scoreTrack['pupil']['ang_dist'].append(angDist_pup)
             scoreTrack['pupil']['sc_rat'].append(scale_pup)
 
-            iri_c = unnormPts(pred_c_iri.detach().cpu().numpy(),
+            iri_c = unnormPts(pred_c_iri,
                               img.shape[2:])
-            pup_c = unnormPts(pred_c_pup.detach().cpu().numpy(),
+            pup_c = unnormPts(pred_c_pup,
                               img.shape[2:])
 
             if args.disp:
@@ -266,7 +270,7 @@ if __name__ == '__main__':
                 dispI = generateImageGrid(img.squeeze().numpy(),
                           predict.numpy(),
                           hMaps.detach().cpu().numpy(),
-                          elOut.detach().cpu().numpy(),
+                          elOut.detach().cpu().numpy().reshape(-1, 2, 5),
                           pup_c,
                           cond.numpy(),
                           override=True,

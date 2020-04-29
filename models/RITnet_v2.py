@@ -169,7 +169,7 @@ class DenseNet2D(nn.Module):
                  chz=32,
                  growth=1.2,
                  actfunc=F.leaky_relu,
-                 norm=nn.BatchNorm2d,
+                 norm=nn.InstanceNorm2d,
                  selfCorr=False,
                  disentangle=False):
         super(DenseNet2D, self).__init__()
@@ -227,13 +227,14 @@ class DenseNet2D(nn.Module):
 
         # wHauss expects GT as rows and cols. This loss is activated only when
         # segmentation GT does not exist
-        loc_noSeg = cond[:, 1, ...] # True means seg does NOT exist
-        if torch.sum(loc_noSeg):
+        loc_noSeg = cond[:, 1, ...].to(torch.bool) # True means seg does NOT exist
+        if torch.sum(~loc_noSeg):
             # If all entries have a GT mask, then ignore this section
-            loss_wHauss = self.wHauss(pupMap[loc_noSeg, ...],
-                                      pupil_center[loc_noSeg, [1, 0]], dsizes)
+            loss_wHauss = self.wHauss(pupMap[~loc_noSeg, ...],
+                                      pupil_center[:, [1, 0]][~loc_noSeg, :], dsizes)
         else:
             loss_wHauss = 0.0
+        # print('wHauss: {}'.format(loss_wHauss.item())) # Starts with ~300
         #%%
         op_tup = get_allLoss(op, # Output segmentation map
                             elOut, # Predicted Ellipse parameters
@@ -310,10 +311,10 @@ def get_allLoss(op, # Network output
     elPhi: Phi values from normalized ellipse equation
     '''
     B, C, H, W = op.shape
-    loc_onlyMask = ~cond[:, 1] # GT mask present (True means exist)
+    loc_onlyMask = ~(cond[:, 1].to(torch.bool)) # GT mask present (True means exist)
 
     pupMask = target==2
-    iriMask = target==1 & target == 2
+    iriMask = (target==1)+(target == 2)
 
     # Segmentation to Ellipse center loss using center of mass
     l_seg2pt_pup, pred_c_seg_pup = get_seg2ptLoss(op[:, 2, ...],
@@ -322,7 +323,7 @@ def get_allLoss(op, # Network output
     if torch.sum(loc_onlyMask):
         # Iris center is only present when GT masks are present
         iriMap = op[loc_onlyMask, 1, ...] + op[loc_onlyMask, 2, ...]
-        l_seg2pt_iri, prec_c_seg_iri = get_seg2ptLoss(iriMap,
+        l_seg2pt_iri, pred_c_seg_iri = get_seg2ptLoss(iriMap,
                                                       elNorm[loc_onlyMask, 0, :2], 1)
     else:
         # If GT map is absent, loss is set to 0.0
@@ -331,7 +332,7 @@ def get_allLoss(op, # Network output
 
     pred_c_seg = torch.stack([pred_c_seg_iri,
                               pred_c_seg_pup], dim=1) # Iris first policy
-    l_seg2pt = l_seg2pt_iri + l_seg2pt_pup
+    l_seg2pt = l_seg2pt_pup +l_seg2pt_iri
 
     # Segmentation loss -> backbone loss
     l_seg = get_segLoss(op, target, spatWts, distMap, loc_onlyMask, alpha)
@@ -345,15 +346,17 @@ def get_allLoss(op, # Network output
     # using regressed values from encoder.
     elPred = torch.cat([pred_c_seg[:, 0, :], elOut[:, 2:5],
                         pred_c_seg[:, 1, :], elOut[:, 7:10]], dim=1) # Bx5
-    l_seg2el = get_seg2elLoss(pupMask, elPred[:,5:]) + get_seg2elLoss(iriMask, elPred[:,:5])
+   
+    l_seg2el = get_seg2elLoss(pupMask, elPred[:, 5:]) + get_seg2elLoss(iriMask, elPred[:, :5])
 
     # Compute ellipse losses - F1 loss for valid samples
     l_ellipse = get_ptLoss(elOut, elNorm.view(-1, 10), loc_onlyMask)
-    print('Ellipse: {}. COM loss: {}. Seg loss: {}. L1 loss: {}. Seg2El: {}'.format(l_ellipse.item(),
+    
+    print('Ellipse: {}. COM loss: {}. Seg loss: {}. Seg2El: {}'.format(l_ellipse.item(),
                                                                                     l_seg2pt.item(),
                                                                                     l_seg.item(),
-                                                                                    l_pt.item(),
                                                                                     l_seg2el.item()))
-    total_loss = l_ellipse + l_seg2pt + 20*l_seg + 10*l_pt + alpha*l_seg2el
+    
+    total_loss = l_ellipse + 20*l_seg +10*l_pt + l_seg2pt+alpha*l_seg2el
 
     return (total_loss, pred_c_seg)

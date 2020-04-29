@@ -372,11 +372,15 @@ def lossandaccuracy(args, loader, model, alpha, device):
                                         cond[:, 1].numpy())[0]
 
             # Scale metric
-            scale_iri = torch.sqrt(torch.sum(elNorm[:, 0, 2:4]**2, dim=1)/torch.sum(elOut[:, 0, 2:4]**2, dim=1))
-            scale_pup = torch.sqrt(torch.sum(elNorm[:, 1, 2:4]**2, dim=1)/torch.sum(elOut[:, 1, 2:4]**2, dim=1))
+            gt_ab = elNorm[:, 0, 2:4]
+            pred_ab = elOut[:, 0, 2:4].cpu().detach()
+            scale_iri = torch.sqrt(torch.sum(gt_ab**2, dim=1)/torch.sum(pred_ab**2, dim=1))
             scale_iri = torch.sum(scale_iri*~cond[:,1]).item()
+            gt_ab = elNorm[:, 1, 2:4]
+            pred_ab = elOut[:, 1, 2:4].cpu().detach()
+            scale_pup = torch.sqrt(torch.sum(gt_ab**2, dim=1)/torch.sum(pred_ab**2, dim=1))
             scale_pup = torch.sum(scale_pup*~cond[:,1]).item()
-
+        
             predict = get_predictions(output)
             iou = getSeg_metrics(labels.numpy(),
                                  predict.numpy(),
@@ -527,6 +531,7 @@ def soft_heaviside(x, sc, mode):
     function approximates the behavior of a 0 or 1 operation in a differentiable
     manner.
     '''
+    sc = torch.tensor([sc]).to(torch.float32).to(x.device)
     if mode==1:
         # Try sc = 64
         return 1/(1 + torch.exp(-sc/x))

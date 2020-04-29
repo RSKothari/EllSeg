@@ -55,7 +55,7 @@ if __name__=='__main__':
     totTime = []
     startTime = time.time()
     for bt, data in enumerate(trainLoader):
-        I, mask, spatialWeights, distMap, pupil_center, elPts, elNorm, cond, imInfo = data
+        I, mask, spatialWeights, distMap, pupil_center, iris_center, elPts, elNorm, cond, imInfo = data
         hMaps = points_to_heatmap(elPts, 2, I.shape[2:])
         dispI = generateImageGrid(I.squeeze().numpy(),
                                   mask.numpy(),
