@@ -3,6 +3,7 @@
 
 import os
 import sys
+import copy
 import torch
 import pickle
 import numpy as np
@@ -101,13 +102,13 @@ if __name__ == '__main__':
 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
                                                            'max',
-                                                           patience=5,
+                                                           patience=10,
                                                            verbose=True,
-                                                           factor=0.01) # Default factor = 0.1
+                                                           factor=0.005) # Default factor = 0.1
 
     patience = 5
     early_stopping = EarlyStopping(mode='max',
-                                   delta=0.01,
+                                   delta=0.005,
                                    verbose=True,
                                    patience=patience,
                                    fName='checkpoint.pt',
@@ -138,15 +139,16 @@ if __name__ == '__main__':
     for epoch in range(startEp, args.epochs):
         accLoss = 0.0
         ious = []
-        pup_c_lat_dists = []
-        pup_c_seg_dists = []
-        pup_ang_lat = []
+
+        scoreType = {'c_dist':[], 'ang_dist': [], 'sc_rat': []}
+        scoreTrack = {'pupil': copy.deepcopy(scoreType),
+                      'iris': copy.deepcopy(scoreType)}
 
         model.train()
         alpha = linVal(epoch, (0, args.epochs), (0, 1), 0)
 
         for bt, batchdata in enumerate(trainloader):
-            img, labels, spatialWeights, distMap, pupil_center, elPts, elNorm, cond, imInfo = batchdata
+            img, labels, spatialWeights, distMap, pupil_center, iris_center, elPts, elNorm, cond, imInfo = batchdata
             hMaps = points_to_heatmap(elPts, 2, img.shape[2:])
 
             model.toggle = False
@@ -177,7 +179,7 @@ if __name__ == '__main__':
                                     cond.to(device).to(args.prec),
                                     imInfo[:, 2].to(device).to(torch.long), # Send DS #
                                     alpha)
-                    output, elOut, _, pred_center, seg_center, loss = out_tup
+                    output, elOut, _, loss = out_tup
                     loss = loss.mean() if args.useMultiGPU else loss
                     loss.backward()
                     opt_disent.step()
@@ -202,51 +204,73 @@ if __name__ == '__main__':
                             cond.to(device).to(args.prec),
                             imInfo[:, 2].to(device).to(torch.long), # Send DS #
                             alpha)
-            output, elOut, _, pred_center, seg_center, loss = out_tup
+            output, elOut, _, loss = out_tup
 
             loss = loss.mean() if args.useMultiGPU else loss
             loss.backward()
             optimizer.step()
 
+            # Predicted centers
+            pred_c_iri = elOut[:, 0, :2].detach().cpu().numpy()
+            pred_c_pup = elOut[:, 1, :2].detach().cpu().numpy()
+
             accLoss += loss.detach().cpu().item()
             predict = get_predictions(output)
+
+            # IOU metric
             iou = getSeg_metrics(labels.numpy(),
                                  predict.numpy(),
                                  cond[:, 1].numpy())[1]
-            ptDist = getPoint_metric(pupil_center.numpy(),
-                                     pred_center.detach().cpu().numpy(),
-                                     cond[:,0].numpy(),
-                                     img.shape[2:],
-                                     True)[0] # Unnormalizes the points
-            ptDist_seg = getPoint_metric(pupil_center.numpy(),
-                                         seg_center.detach().cpu().numpy(),
+
+            # Center distance
+            ptDist_iri = getPoint_metric(iris_center.numpy(),
+                                         pred_c_iri,
                                          cond[:,0].numpy(),
                                          img.shape[2:],
                                          True)[0] # Unnormalizes the points
-            angDist_reg = getAng_metric(elNorm[:, 1, -1].numpy(),
-                                        elOut[:, -1].detach().cpu().numpy(),
+            ptDist_pup = getPoint_metric(pupil_center.numpy(),
+                                         pred_c_pup,
+                                         cond[:,0].numpy(),
+                                         img.shape[2:],
+                                         True)[0] # Unnormalizes the points
+
+            # Angular distance
+            angDist_iri = getAng_metric(elNorm[:, 0, 4].numpy(),
+                                        elOut[:, 0, 4].detach().cpu().numpy(),
+                                        cond[:, 1].numpy())[0]
+            angDist_pup = getAng_metric(elNorm[:, 1, 4].numpy(),
+                                        elOut[:, 1, 4].detach().cpu().numpy(),
                                         cond[:, 1].numpy())[0]
 
-            # Append scores to running metric
-            pup_c_lat_dists.append(ptDist)
-            pup_c_seg_dists.append(ptDist_seg)
-            pup_ang_lat.append(angDist_reg)
-            ious.append(iou)
+            # Scale metric
+            scale_iri = torch.sqrt(torch.sum(elNorm[:, 0, 2:4]**2, dim=1)/torch.sum(elOut[:, 0, 2:4]**2, dim=1))
+            scale_pup = torch.sqrt(torch.sum(elNorm[:, 1, 2:4]**2, dim=1)/torch.sum(elOut[:, 1, 2:4]**2, dim=1))
+            scale_iri = torch.sum(scale_iri*~cond[:,1]).item()
+            scale_pup = torch.sum(scale_pup*~cond[:,1]).item()
 
-            pup_c = unnormPts(pred_center.detach().cpu().numpy(),
+            # Append to score dictionary
+            scoreTrack['iris']['c_dist'].append(ptDist_iri)
+            scoreTrack['iris']['ang_dist'].append(angDist_iri)
+            scoreTrack['iris']['sc_rat'].append(scale_iri)
+            scoreTrack['pupil']['c_dist'].append(ptDist_pup)
+            scoreTrack['pupil']['ang_dist'].append(angDist_pup)
+            scoreTrack['pupil']['sc_rat'].append(scale_pup)
+
+            iri_c = unnormPts(pred_c_iri.detach().cpu().numpy(),
                               img.shape[2:])
-            seg_c = unnormPts(seg_center.detach().cpu().numpy(),
+            pup_c = unnormPts(pred_c_pup.detach().cpu().numpy(),
                               img.shape[2:])
-            dispI = generateImageGrid(img.squeeze().numpy(),
-                                      predict.numpy(),
-                                      hMaps.detach().cpu().numpy(),
-                                      elOut.detach().cpu().numpy().reshape(-1, 2, 5),
-                                      pup_c,
-                                      cond.numpy(),
-                                      override=True,
-                                      heatmaps=False)
 
             if args.disp:
+                # Generate image grid with overlayed predicted data
+                dispI = generateImageGrid(img.squeeze().numpy(),
+                          predict.numpy(),
+                          hMaps.detach().cpu().numpy(),
+                          elOut.detach().cpu().numpy(),
+                          pup_c,
+                          cond.numpy(),
+                          override=True,
+                          heatmaps=False)
                 if (epoch == startEp) and (bt == 0):
                     h_im = plt.imshow(dispI.permute(1, 2, 0))
                     plt.pause(0.01)
@@ -260,50 +284,63 @@ if __name__ == '__main__':
                                                                      len(trainloader),
                                                                      loss.item()))
 
+        # Sketch the very last batch. Training has dropped uneven batches..
+        dispI = generateImageGrid(img.squeeze().numpy(),
+                                  predict.numpy(),
+                                  hMaps.detach().cpu().numpy(),
+                                  elOut.detach().cpu().numpy(),
+                                  pup_c,
+                                  cond.numpy(),
+                                  override=True,
+                                  heatmaps=False)
+
         ious = np.stack(ious, axis=0)
         ious = np.nanmean(ious, axis=0)
         logger.write('Epoch:{}, Train IoU: {}'.format(epoch, ious))
-
-        # Add info to tensorboard
-        writer.add_scalar('train/loss', accLoss/bt, epoch)
-        writer.add_scalars('train/pup_l_c', {'mu':np.nanmean(pup_c_lat_dists),
-                                             'std':np.nanstd(pup_c_lat_dists)}, epoch)
-        writer.add_scalars('train/pup_s_c', {'mu':np.nanmean(pup_c_seg_dists),
-                                             'std':np.nanstd(pup_c_seg_dists)}, epoch)
-        if np.any(~np.isnan(pup_ang_lat)):
-            # These values will not exist when training with pure pupil center code
-            writer.add_scalars('train/pup_ang', {'mu':np.nanmean(pup_ang_lat),
-                                                 'std':np.nanstd(pup_ang_lat)}, epoch)
-            writer.add_scalars('train/iou', {'mIOU':np.mean(ious),
-                                             'bG':ious[0],
-                                             'iris':ious[1],
-                                             'pupil':ious[2]}, epoch)
 
         out_tup = lossandaccuracy(args, # Training arguments
                                   validloader, # Validation loader
                                   model, # Model
                                   alpha, # Alpha value to measure loss
                                   device)
-        lossvalid, ious, pup_c_lat_dists, pup_c_seg_dists, pup_ang_lat, latent_codes = out_tup
+        lossvalid, ious_valid, scoreTrack_v, latent_codes = out_tup
 
-        # Add valid info to tensorboard
-        writer.add_scalar('valid/loss', lossvalid, epoch)
-        writer.add_scalars('valid/pup_l_c', {'mu':np.nanmean(pup_c_lat_dists),
-                                             'std':np.nanstd(pup_c_lat_dists)}, epoch)
-        writer.add_scalars('valid/pup_s_c', {'mu':np.nanmean(pup_c_seg_dists),
-                                             'std':np.nanstd(pup_c_seg_dists)}, epoch)
-        if np.any(~np.isnan(pup_ang_lat)):
-            # These values will not exist when training with pure pupil center code
-            writer.add_scalars('valid/pup_ang', {'mu':np.nanmean(pup_ang_lat),
-                                                 'std':np.nanstd(pup_ang_lat)}, epoch)
-            writer.add_scalars('valid/iou', {'mIOU':np.mean(ious),
-                                             'bG':ious[0],
-                                             'iris':ious[1],
-                                             'pupil':ious[2]}, epoch)
+        # Add iris info to tensorboard
+        writer.add_scalars('iri_c/mu', {'train':np.nanmean(scoreTrack['iris']['c_dist']),
+                                         'valid':np.nanmean(scoreTrack_v['iris']['c_dist'])}, epoch)
+        writer.add_scalars('iri_c/std', {'train':np.nanstd(scoreTrack['iris']['c_dist']),
+                                          'valid':np.nanstd(scoreTrack_v['iris']['c_dist'])}, epoch)
+        writer.add_scalars('iri_ang/mu', {'train':np.nanmean(scoreTrack['iris']['ang_dist']),
+                                          'valid':np.nanmean(scoreTrack_v['iris']['ang_dist'])}, epoch)
+        writer.add_scalars('iri_ang/std', {'train':np.nanstd(scoreTrack['iris']['ang_dist']),
+                                          'valid':np.nanstd(scoreTrack_v['iris']['ang_dist'])}, epoch)
+        writer.add_scalars('iri_sc/mu', {'train':np.nanmean(scoreTrack['iris']['ang_dist']),
+                                          'valid':np.nanmean(scoreTrack_v['iris']['ang_dist'])}, epoch)
+        writer.add_scalars('iri_sc/std', {'train':np.nanstd(scoreTrack['iris']['sc_rat']),
+                                          'valid':np.nanstd(scoreTrack_v['iris']['sc_rat'])}, epoch)
+
+        # Add pupil info to tensorboard
+        writer.add_scalars('pup_c/mu', {'train':np.nanmean(scoreTrack['pupil']['c_dist']),
+                                         'valid':np.nanmean(scoreTrack_v['pupil']['c_dist'])}, epoch)
+        writer.add_scalars('pup_c/std', {'train':np.nanstd(scoreTrack['pupil']['c_dist']),
+                                          'valid':np.nanstd(scoreTrack_v['pupil']['c_dist'])}, epoch)
+        writer.add_scalars('pup_ang/mu', {'train':np.nanmean(scoreTrack['pupil']['ang_dist']),
+                                          'valid':np.nanmean(scoreTrack_v['pupil']['ang_dist'])}, epoch)
+        writer.add_scalars('pup_ang/std', {'train':np.nanstd(scoreTrack['pupil']['ang_dist']),
+                                          'valid':np.nanstd(scoreTrack_v['pupil']['ang_dist'])}, epoch)
+        writer.add_scalars('pup_sc/mu', {'train':np.nanmean(scoreTrack['pupil']['ang_dist']),
+                                          'valid':np.nanmean(scoreTrack_v['pupil']['ang_dist'])}, epoch)
+        writer.add_scalars('pup_sc/std', {'train':np.nanstd(scoreTrack['pupil']['sc_rat']),
+                                          'valid':np.nanstd(scoreTrack_v['pupil']['sc_rat'])}, epoch)
+
+        writer.add_scalar('loss/train', accLoss/bt, epoch)
+        writer.add_scalar('loss/valid', lossvalid, epoch)
+
+        # Write image to tensorboardX
         writer.add_image('train/op', dispI, epoch)
 
         if epoch%embed_log == 0:
-            print('Saving embeddings ...')
+            print('Saving validation embeddings ...')
             writer.add_embedding(torch.cat(latent_codes, 0),
                                  metadata=validObj.imList[:len(latent_codes)*args.batchsize, 2],
                                  global_step=epoch)
@@ -316,12 +353,14 @@ if __name__ == '__main__':
         stateDict = model.state_dict() if not args.useMultiGPU else model.module.state_dict()
         netDict['state_dict'] = {k: v for k, v in stateDict.items() if 'dsIdentify_lin' not in k}
 
+        pup_c_dist = np.nanmean(scoreTrack_v['pupil']['c_dist'])
         if not np.isnan(np.mean(ious)):
-            scoreTracker = np.mean(ious) + 2 - 2.5e-3*(np.nanmean(pup_c_lat_dists) + np.nanmean(pup_c_seg_dists)) # Max value 3
+            iri_c_dist = np.nanmean(scoreTrack_v['iris']['c_dist'])
+            stopMetric = np.mean(ious_valid) + 2 - 2.5e-3*(pup_c_dist + iri_c_dist) # Max value 3
         else:
-            scoreTracker = 2 - 2.5e-3*(np.nanmean(pup_c_lat_dists) + np.nanmean(pup_c_seg_dists)) # Max value 2
-        scheduler.step(scoreTracker)
-        early_stopping(scoreTracker, netDict)
+            stopMetric = 1 - pup_c_dist # Max value 1
+        scheduler.step(stopMetric)
+        early_stopping(stopMetric, netDict)
 
         if early_stopping.early_stop:
             torch.save(netDict, os.path.join(path2model, args.model + 'earlystop_{}.pkl'.format(epoch)))

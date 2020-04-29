@@ -320,14 +320,16 @@ def lossandaccuracy(args, loader, model, alpha, device):
     '''
     epoch_loss = []
     ious = []
-    pup_c_lat_dists = []
-    pup_c_seg_dists = []
-    pup_ang_lat = []
+
+    scoreType = {'c_dist':[], 'ang_dist': [], 'sc_rat': []}
+    scoreTrack = {'pupil': copy.deepcopy(scoreType),
+                  'iris': copy.deepcopy(scoreType)}
+
     model.eval()
     latent_codes = []
     with torch.no_grad():
         for bt, batchdata in enumerate(tqdm.tqdm(loader)):
-            img, labels, spatialWeights, distMap, pupil_center, elPts, elNorm, cond, imInfo = batchdata
+            img, labels, spatialWeights, distMap, pupil_center, iris_center, elPts, elNorm, cond, imInfo = batchdata
             hMaps = points_to_heatmap(elPts, 2, img.shape[2:])
             op_tup = model(img.to(device).to(args.prec),
                             labels.to(device).long(),
@@ -340,44 +342,60 @@ def lossandaccuracy(args, loader, model, alpha, device):
                             cond.to(device).to(args.prec),
                             imInfo[:, 2].to(device).to(torch.long), # Send DS #
                             alpha)
-            output, elOut, latent, pred_center, seg_center, loss = op_tup
+
+            output, elOut, latent, loss = op_tup
             latent_codes.append(latent.detach().cpu())
             loss = loss.mean() if args.useMultiGPU else loss
             epoch_loss.append(loss.item())
 
-            ptDist = getPoint_metric(pupil_center.numpy(),
-                                     pred_center.detach().cpu().numpy(),
-                                     cond[:, 0].numpy(),
-                                     img.shape[2:],
-                                     True)[0] # Unnormalizes the points
+            pred_c_iri = elOut[:, 0, :2].detach().cpu().numpy()
+            pred_c_pup = elOut[:, 1, :2].detach().cpu().numpy()
 
-            ptDist_seg = getPoint_metric(pupil_center.numpy(),
-                                         seg_center.detach().cpu().numpy(),
-                                         cond[:, 0].numpy(),
+            # Center distance
+            ptDist_iri = getPoint_metric(iris_center.numpy(),
+                                         pred_c_iri,
+                                         cond[:,0].numpy(),
+                                         img.shape[2:],
+                                         True)[0] # Unnormalizes the points
+            ptDist_pup = getPoint_metric(pupil_center.numpy(),
+                                         pred_c_pup,
+                                         cond[:,0].numpy(),
                                          img.shape[2:],
                                          True)[0] # Unnormalizes the points
 
-            # Iris angle
-            angDist_reg = getAng_metric(elNorm[:, 1, -1].numpy(),
-                                        elOut[:, -1].detach().cpu().numpy(),
+            # Angular distance
+            angDist_iri = getAng_metric(elNorm[:, 0, 4].numpy(),
+                                        elOut[:, 0, 4].detach().cpu().numpy(),
                                         cond[:, 1].numpy())[0]
+            angDist_pup = getAng_metric(elNorm[:, 1, 4].numpy(),
+                                        elOut[:, 1, 4].detach().cpu().numpy(),
+                                        cond[:, 1].numpy())[0]
+
+            # Scale metric
+            scale_iri = torch.sqrt(torch.sum(elNorm[:, 0, 2:4]**2, dim=1)/torch.sum(elOut[:, 0, 2:4]**2, dim=1))
+            scale_pup = torch.sqrt(torch.sum(elNorm[:, 1, 2:4]**2, dim=1)/torch.sum(elOut[:, 1, 2:4]**2, dim=1))
+            scale_iri = torch.sum(scale_iri*~cond[:,1]).item()
+            scale_pup = torch.sum(scale_pup*~cond[:,1]).item()
 
             predict = get_predictions(output)
             iou = getSeg_metrics(labels.numpy(),
                                  predict.numpy(),
                                  cond[:, 1].numpy())[1]
 
-            pup_c_lat_dists.append(ptDist)
-            pup_c_seg_dists.append(ptDist_seg)
-            pup_ang_lat.append(angDist_reg)
+            # Append to score dictionary
+            scoreTrack['iris']['c_dist'].append(ptDist_iri)
+            scoreTrack['iris']['ang_dist'].append(angDist_iri)
+            scoreTrack['iris']['sc_rat'].append(scale_iri)
+            scoreTrack['pupil']['c_dist'].append(ptDist_pup)
+            scoreTrack['pupil']['ang_dist'].append(angDist_pup)
+            scoreTrack['pupil']['sc_rat'].append(scale_pup)
+
             ious.append(iou)
     ious = np.stack(ious, axis=0)
 
     return (np.mean(epoch_loss),
             np.nanmean(ious, 0),
-            pup_c_lat_dists,
-            pup_c_seg_dists,
-            pup_ang_lat,
+            scoreTrack,
             latent_codes)
 
 def points_to_heatmap(pts, std, res):
@@ -562,6 +580,36 @@ def generaliz_mean(tensor, dim, p=-9, keepdim=False):
     assert p < 0
     res= torch.mean((tensor + 1e-6)**p, dim, keepdim=keepdim)**(1./p)
     return res
+
+class linStack(torch.nn.Module):
+    """A stack of linear layers followed by batch norm and hardTanh
+
+    Attributes:
+        num_layers: the number of linear layers.
+        in_dim: the size of the input sample.
+        hidden_dim: the size of the hidden layers.
+        out_dim: the size of the output.
+    """
+    def __init__(self, num_layers, in_dim, hidden_dim, out_dim, bias, actBool, dp):
+        super().__init__()
+
+        layers_lin = []
+        for i in range(num_layers):
+            m = torch.nn.Linear(hidden_dim if i > 0 else in_dim,
+                hidden_dim if i < num_layers - 1 else out_dim, bias=bias)
+            layers_lin.append(m)
+        self.layersLin = torch.nn.ModuleList(layers_lin)
+        self.act_func = torch.nn.SELU()
+        self.actBool = actBool
+        self.dp = torch.nn.Dropout(p=dp)
+
+    def forward(self, x):
+        # Input shape (batch, features, *)
+        for i, _ in enumerate(self.layersLin):
+            x = self.act_func(x) if self.actBool else x
+            x = self.layersLin[i](x)
+            x = self.dp(x)
+        return x
 
 class regressionModule(torch.nn.Module):
     def __init__(self, sizes, opChannels=10):

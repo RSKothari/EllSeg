@@ -5,6 +5,7 @@ Created on Tue Aug 27 16:04:18 2019
 """
 ##https://github.com/Bjarten/early-stopping-pytorch/blob/master/pytorchtools.py
 import os
+import sys
 import torch
 import numpy as np
 
@@ -36,7 +37,7 @@ class EarlyStopping:
         self.best_score = None
         self.early_stop = False
         self.val_loss_min = np.Inf if mode == 'min' else -np.Inf
-        self.delta = delta
+        self.delta = delta if mode == 'max' else -delta
         self.path2save = path2save
         self.fName = fName
         self.mode = mode
@@ -46,7 +47,7 @@ class EarlyStopping:
         if self.best_score is None:
             self.best_score = score
             self.save_checkpoint(val_loss, model)
-        elif score < (self.best_score - self.delta):
+        elif score < (self.best_score + self.delta):
             self.counter += 1
             print('EarlyStopping counter: {} out of {}'.format(self.counter, self.patience))
             if self.counter >= self.patience:
@@ -136,7 +137,6 @@ def my_collate(batch):
     irisPhi = torch.stack([item[7][1] for item in batch], dim=0)
     return I, M, M_nS, spatW, distM, subjectID, fName, (pupilPhi, irisPhi)
 
-
 def load_from_file(paths_file):
     # Loads model weights from paths_file, a tuple of filepaths
     # Sequentially moves from first file, attempts to load and if unsuccessful
@@ -152,33 +152,3 @@ def load_from_file(paths_file):
         else:
             netDict = {}
     return netDict
-
-class linStack(torch.nn.Module):
-    """A stack of linear layers followed by batch norm and hardTanh
-
-    Attributes:
-        num_layers: the number of linear layers.
-        in_dim: the size of the input sample.
-        hidden_dim: the size of the hidden layers.
-        out_dim: the size of the output.
-    """
-    def __init__(self, num_layers, in_dim, hidden_dim, out_dim, bias, actBool, dp):
-        super().__init__()
-
-        layers_lin = []
-        for i in range(num_layers):
-            m = torch.nn.Linear(hidden_dim if i > 0 else in_dim,
-                hidden_dim if i < num_layers - 1 else out_dim, bias=bias)
-            layers_lin.append(m)
-        self.layersLin = torch.nn.ModuleList(layers_lin)
-        self.act_func = torch.nn.SELU()
-        self.actBool = actBool
-        self.dp = torch.nn.Dropout(p=dp)
-
-    def forward(self, x):
-        # Input shape (batch, features, *)
-        for i, _ in enumerate(self.layersLin):
-            x = self.act_func(x) if self.actBool else x
-            x = self.layersLin[i](x)
-            x = self.dp(x)
-        return x

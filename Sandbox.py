@@ -11,11 +11,12 @@ import time
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
-from utils import generateImageGrid, points_to_heatmap
+
+from helperfunctions import mypause
 from torch.utils.data import DataLoader
-from RITEyes_helper.helperfunctions import mypause
-from RITEyes_helper.CurriculumLib import readArchives, listDatasets, generate_fileList
-from RITEyes_helper.CurriculumLib import selDataset, selSubset, DataLoader_riteyes
+from utils import generateImageGrid, points_to_heatmap
+from CurriculumLib import readArchives, listDatasets, generate_fileList
+from CurriculumLib import selDataset, selSubset, DataLoader_riteyes
 
 
 if __name__=='__main__':
@@ -62,7 +63,7 @@ if __name__=='__main__':
                                   elNorm.numpy(),
                                   pupil_center.numpy(),
                                   cond.numpy())
-        
+
         dT = time.time() - startTime
         totTime.append(dT)
         print('Batch: {}. Time: {}'.format(bt, dT))

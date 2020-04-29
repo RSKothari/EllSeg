@@ -35,10 +35,11 @@ def get_seg2ptLoss(op, gtPts, temperature):
 def get_segLoss(op, target, spatWts, distMap, cond, alpha):
     # Custom function to iteratively go over each sample in a batch and
     # compute loss.
+    # cond: Mask exist -> 1
     B = op.shape[0]
     loss_seg = []
     for i in range(0, B):
-        if cond[i] == 0:
+        if cond[i] == 1:
             # Valid mask exists
             l_sl = SurfaceLoss(op[i, ...].unsqueeze(0),
                                distMap[i, ...].unsqueeze(0))
@@ -60,7 +61,7 @@ def get_ptLoss(ip_vector, target_vector, cond):
     B = ip_vector.shape[0]
     loss_pt = []
     for i in range(0, B):
-        if cond[i] == 0:
+        if cond[i] == 1:
             # Valid entry
             loss_pt.append(F.l1_loss(ip_vector[i, ...],
                                      target_vector[i, ...]))
@@ -138,7 +139,7 @@ def conf_Loss(x, gt, flag):
         loss = F.cross_entropy(x, gt)
     return loss
 
-def selfCorr_seg2el(opSeg, opEl, dims):
+def get_seg2elLoss(opSeg, opEl):
     # Self correction loss based on regressed ellipse fit. Higher the overlap,
     # the more negative the loss function will be
     # opSeg: Segmentation output [B, 3, H, W]
@@ -147,12 +148,6 @@ def selfCorr_seg2el(opSeg, opEl, dims):
 
     loss = 0
     B, C, H, W = opSeg.shape
-    allDims = [0, 1, 2]
-    n_dims = [ele for ele in allDims if ele not in dims]
-    foreground = opSeg[:, dims, ...] if len(dims)==1 else torch.sum(opSeg[:, dims, ...], dim=1)
-    background = opSeg[:, n_dims, ...] if len(n_dims)==1 else torch.sum(opSeg[:, n_dims, ...], dim=1)
-    seg = torch.stack([foreground, background], dim=1)
-    seg = torch.softmax(seg, dim=1)
 
     mesh = create_meshgrid(H, W, normalized_coordinates=True).squeeze().cuda() # 1xHxWx2
     mesh.requires_grad = False
@@ -160,9 +155,9 @@ def selfCorr_seg2el(opSeg, opEl, dims):
     for i in range(0, B):
         X = (mesh[..., 0] - opEl[i, 0])*torch.cos(opEl[i, -1]) + (mesh[..., 1] - opEl[i, 1])*torch.sin(opEl[i, -1])
         Y = -(mesh[..., 0] - opEl[i, 0])*torch.sin(opEl[i, -1]) + (mesh[..., 1] - opEl[i, 1])*torch.cos(opEl[i, -1])
-        wtMat = 1 - (X/opEl[i, 2])**2 - (Y/opEl[i, 3])**2
-        wtMat = soft_heaviside(wtMat, sc=0.001, mode=2) # Positive inside the ellipse
-        mask = -seg[i, 0, ...]*wtMat # Higher overlap means more negative
+        wtMat = ((X/opEl[i, 2])**2 + (Y/opEl[i, 3])**2) - 1
+        wtMat = soft_heaviside(wtMat, sc=0.001, mode=2) # Positive outside the ellipse
+        mask = opSeg*wtMat # Higher overlap means more smaller the value
         loss += torch.sum(mask)/(H*W)
     return loss/B
 
@@ -171,6 +166,7 @@ class WeightedHausdorffDistance(nn.Module):
                  resized_height, resized_width,
                  p=-9,
                  return_2_terms=False):
+        super(WeightedHausdorffDistance, self).__init__()
         """
         :param resized_height: Number of rows in the image.
         :param resized_width: Number of columns in the image.
@@ -233,7 +229,7 @@ class WeightedHausdorffDistance(nn.Module):
         assert batch_size == gt.shape[0]
 
         self.all_img_locations = self.all_img_locations.to(prob_map.device)
-        self.resized_size = self.all_img_locations.to(prob_map.device)
+        self.resized_size = self.resized_size.to(prob_map.device)
         terms_1 = []
         terms_2 = []
         for b in range(batch_size):
