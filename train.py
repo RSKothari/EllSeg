@@ -221,6 +221,7 @@ if __name__ == '__main__':
             iou = getSeg_metrics(labels.numpy(),
                                  predict.numpy(),
                                  cond[:, 1].numpy())[1]
+            ious.append(iou)
 
             # Center distance
             ptDist_iri = getPoint_metric(iris_center.numpy(),
@@ -292,7 +293,7 @@ if __name__ == '__main__':
         dispI = generateImageGrid(img.squeeze().numpy(),
                                   predict.numpy(),
                                   hMaps.detach().cpu().numpy(),
-                                  elOut.detach().cpu().numpy(),
+                                  elOut.detach().cpu().numpy().reshape(-1, 2, 5),
                                   pup_c,
                                   cond.numpy(),
                                   override=True,

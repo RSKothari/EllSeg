@@ -348,8 +348,8 @@ def lossandaccuracy(args, loader, model, alpha, device):
             loss = loss.mean() if args.useMultiGPU else loss
             epoch_loss.append(loss.item())
 
-            pred_c_iri = elOut[:, 0, :2].detach().cpu().numpy()
-            pred_c_pup = elOut[:, 1, :2].detach().cpu().numpy()
+            pred_c_iri = elOut[:, 0:2].detach().cpu().numpy()
+            pred_c_pup = elOut[:, 5:7].detach().cpu().numpy()
 
             # Center distance
             ptDist_iri = getPoint_metric(iris_center.numpy(),
@@ -365,19 +365,19 @@ def lossandaccuracy(args, loader, model, alpha, device):
 
             # Angular distance
             angDist_iri = getAng_metric(elNorm[:, 0, 4].numpy(),
-                                        elOut[:, 0, 4].detach().cpu().numpy(),
+                                        elOut[:,  4].detach().cpu().numpy(),
                                         cond[:, 1].numpy())[0]
             angDist_pup = getAng_metric(elNorm[:, 1, 4].numpy(),
-                                        elOut[:, 1, 4].detach().cpu().numpy(),
+                                        elOut[:, 9].detach().cpu().numpy(),
                                         cond[:, 1].numpy())[0]
 
             # Scale metric
             gt_ab = elNorm[:, 0, 2:4]
-            pred_ab = elOut[:, 0, 2:4].cpu().detach()
+            pred_ab = elOut[:, 2:4].cpu().detach()
             scale_iri = torch.sqrt(torch.sum(gt_ab**2, dim=1)/torch.sum(pred_ab**2, dim=1))
             scale_iri = torch.sum(scale_iri*~cond[:,1]).item()
             gt_ab = elNorm[:, 1, 2:4]
-            pred_ab = elOut[:, 1, 2:4].cpu().detach()
+            pred_ab = elOut[:, 7:9].cpu().detach()
             scale_pup = torch.sqrt(torch.sum(gt_ab**2, dim=1)/torch.sum(pred_ab**2, dim=1))
             scale_pup = torch.sum(scale_pup*~cond[:,1]).item()
 
@@ -385,6 +385,7 @@ def lossandaccuracy(args, loader, model, alpha, device):
             iou = getSeg_metrics(labels.numpy(),
                                  predict.numpy(),
                                  cond[:, 1].numpy())[1]
+            ious.append(iou)
 
             # Append to score dictionary
             scoreTrack['iris']['c_dist'].append(ptDist_iri)
@@ -544,7 +545,7 @@ def soft_heaviside(x, sc, mode):
     elif mode==3:
         # Good ol' scaled sigmoid. FUTURE: make sc free parameter
         # Try sc = 8
-        return F.sigmoid(sc*x)
+        return torch.sigmoid(sc*x)
     else:
         print('Mode undefined')
 

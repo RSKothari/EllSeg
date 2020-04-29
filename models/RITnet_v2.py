@@ -351,12 +351,12 @@ def get_allLoss(op, # Network output
 
     # Compute ellipse losses - F1 loss for valid samples
     l_ellipse = get_ptLoss(elOut, elNorm.view(-1, 10), loc_onlyMask)
-
+    '''
     print('Ellipse: {}. COM loss: {}. Seg loss: {}. Seg2El: {}'.format(l_ellipse.item(),
                                                                                     l_seg2pt.item(),
                                                                                     l_seg.item(),
                                                                                     l_seg2el.item()))
-
-    total_loss = l_ellipse + 20*l_seg + 10*l_pt + l_seg2pt + alpha*l_seg2el
+    '''
+    total_loss = l_ellipse + 20*l_seg + 10*l_pt + l_seg2pt + 20*alpha*l_seg2el
 
     return (total_loss, pred_c_seg)

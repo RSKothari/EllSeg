@@ -160,7 +160,7 @@ def get_seg2elLoss(opSeg, opEl):
         negmask = -posmask
         posmask = soft_heaviside(posmask, sc=8, mode=3) # Positive outside the ellipse
         negmask = soft_heaviside(negmask, sc=8, mode=3) # Positive inside the ellipse
-        loss = F.binary_cross_entropy(posmask, 1-opSeg) + F.binary_cross_entropy(negmask, opSeg)
+        loss = F.binary_cross_entropy(posmask, 1-opSeg[i, ...]) + F.binary_cross_entropy(negmask, opSeg[i, ...])
         #mask = opSeg[i, ...]*posmask + (1 - opSeg[i, ...])*negmask# Higher overlap means more smaller the value
         #loss += torch.sum(mask)#/(np.sqrt(H**2 + W**2))
     return loss/B
