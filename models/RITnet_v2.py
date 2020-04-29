@@ -186,7 +186,7 @@ class DenseNet2D(nn.Module):
 
         self.enc = DenseNet_encoder(in_c=1, chz=chz, actfunc=actfunc, growth=growth, norm=norm)
         self.dec = DenseNet_decoder(chz=chz, out_c=3, actfunc=actfunc, growth=growth, norm=norm)
-        self.elReg = regressionModule(self.sizes, opChannels=10)
+        self.elReg = regressionModule(self.sizes)
 
         self._initialize_weights()
 
@@ -315,7 +315,7 @@ def get_allLoss(op, # Network output
     l_seg2pt_pup, pred_c_seg_pup = get_seg2ptLoss(op[:, 2, ...],
                                                   normPts(pupil_center,
                                                           target.shape[1:]), temperature=1)
-    if torch.sum(loc_onlyMask):
+    if False:#torch.sum(loc_onlyMask):
         # Iris center is only present when GT masks are present
         iriMap = op[loc_onlyMask, 1, ...] + op[loc_onlyMask, 2, ...]
         l_seg2pt_iri, pred_c_seg_iri = get_seg2ptLoss(iriMap,
@@ -346,12 +346,12 @@ def get_allLoss(op, # Network output
 
     # Compute ellipse losses - F1 loss for valid samples
     l_ellipse = get_ptLoss(elOut, elNorm.view(-1, 10), loc_onlyMask)
-    '''
+    print('Center: {}'.format(pred_c_seg[0, 1, :]))
     print('Ellipse: {}. COM loss: {}. Seg loss: {}. Seg2El: {}'.format(l_ellipse.item(),
                                                                                     l_seg2pt.item(),
                                                                                     l_seg.item(),
                                                                                     l_seg2el.item()))
-    '''
-    total_loss = l_ellipse + 20*l_seg + 10*l_pt + l_seg2pt + 20*alpha*l_seg2el
+
+    total_loss = l_seg2pt + 20*l_seg + alpha*(10*l_pt + l_ellipse + 20*l_seg2el)
 
     return (total_loss, pred_c_seg)

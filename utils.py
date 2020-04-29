@@ -625,7 +625,7 @@ class linStack(torch.nn.Module):
         return x
 
 class regressionModule(torch.nn.Module):
-    def __init__(self, sizes, opChannels=10):
+    def __init__(self, sizes):
         super(regressionModule, self).__init__()
         inChannels = sizes['enc']['op'][-1]
         self.max_pool = nn.AvgPool2d(kernel_size=2)
@@ -682,4 +682,5 @@ class regressionModule(torch.nn.Module):
                         iri_c,
                         iri_param,
                         iri_angle.unsqueeze(1)], dim=1)
+        print(op)
         return op
