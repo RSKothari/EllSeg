@@ -284,7 +284,7 @@ def get_allLoss(op, # Network output
     l_seg2pt_pup, pred_c_seg_pup = get_seg2ptLoss(op[:, 2, ...],
                                                   normPts(pupil_center,
                                                   target.shape[1:]), temperature=1)
-    l_seg2pt_pup = torch.mean(l_seg2pt_pup.sum(dim=1))
+    l_seg2pt_pup = torch.mean(l_seg2pt_pup)
     
     # Segmentation to iris center loss using center of mass
     if torch.sum(loc_onlyMask):
@@ -292,7 +292,8 @@ def get_allLoss(op, # Network output
         # elNorm will hold garbage values. Those samples should not be backprop
         l_seg2pt_iri, pred_c_seg_iri = get_seg2ptLoss(op[:, 1, ...],
                                                       elNorm[:, 0, :2], temperature=1)
-        l_seg2pt_iri = torch.sum(l_seg2pt_iri.sum(dim=1)*loc_onlyMask)/torch.sum(loc_onlyMask.to(torch.float32))
+        temp = torch.stack([loc_onlyMask, loc_onlyMask], dim=1)
+        l_seg2pt_iri = torch.sum(l_seg2pt_iri*temp)/torch.sum(temp.to(torch.float32))
         
     else:
         # If GT map is absent, loss is set to 0.0
