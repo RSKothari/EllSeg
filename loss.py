@@ -29,7 +29,7 @@ def get_seg2ptLoss(op, gtPts, temperature=1):
     ypos = torch.sum(wtMap*yloc, -1, keepdim=True)
     predPts = torch.stack([xpos, ypos], dim=1).squeeze()
 
-    loss = F.l1_loss(predPts, gtPts, reduction='mean')
+    loss = F.l1_loss(predPts, gtPts, reduction='none')
     return loss, predPts
 
 def get_segLoss(op, target, spatWts, distMap, cond, alpha):
@@ -282,8 +282,8 @@ class WeightedHausdorffDistance(nn.Module):
         terms_2 = torch.stack(terms_2)
 
         if self.return_2_terms:
-            res = terms_1.mean(), terms_2.mean()
+            res = terms_1, terms_2
         else:
-            res = terms_1.mean() + terms_2.mean()
+            res = terms_1 + terms_2
 
         return res

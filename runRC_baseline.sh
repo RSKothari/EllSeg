@@ -2,8 +2,7 @@
 
 path2ds="/home/rsk3900/Datasets/"
 epochs=100
-workers=9
-batchsize=18
+workers=12
 lr=0.0005
 
 spack env activate riteyes4
@@ -19,20 +18,23 @@ spack env activate riteyes4
 # spack load /me75cc2 # Load tqdm
 # spack load /hlxw2mt # Load h5py with MPI
 
-declare -a curObj_list=("NVGaze" "PupilNet" "OpenEDS" "Fuhl" "riteyes-general", "LPW")
+declare -a curObj_list=("NVGaze" "PupilNet" "OpenEDS" "Fuhl" "riteyes-general" "LPW")
+declare -a batchsize_list=("36" "48" "36" "48" "36" "48")
 declare -a selfCorr_list=("0")
 declare -a disentangle_list=("0")
 
-for curObj in "${curObj_list[@]}"
+for i in "${!curObj_list[@]}"
 do
     for selfCorr in "${selfCorr_list[@]}"
     do
         for disentangle in "${disentangle_list[@]}"
         do
-            baseJobName="RC_e2e_${curObj}_${selfCorr}_${disentangle}"
+            batchsize=${batchsize_list[i]}
+            baseJobName="RC_e2e_${curObj_list[i]}_${selfCorr}_${disentangle}"
             str="#!/bin/bash\npython3 train.py --path2data=${path2ds} --expname=${baseJobName} "
-            str+="--curObj=${curObj} --batchsize=${batchsize} --workers=${workers} --prec=32 --epochs=${epochs} "
+            str+="--curObj=${curObj_list[i]} --batchsize=${batchsize} --workers=${workers} --prec=32 --epochs=${epochs} "
             str+="--disp=0 --overfit=0 --lr=${lr} --selfCorr=${selfCorr} --disentangle=${disentangle}"
+            echo $str
             echo -e $str > command.lock
             sbatch -J ${baseJobName} -o "rc_log/baseline/${baseJobName}.o" -e "rc_log/baseline/${baseJobName}.e" --mem=16G --cpus-per-task=9 -p debug -A riteyes --gres=gpu:p4:2 -t 0-1:0:0 command.lock
         done

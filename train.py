@@ -17,7 +17,7 @@ from helperfunctions import mypause, linVal
 from pytorchtools import EarlyStopping, load_from_file
 from utils import get_nparams, Logger, get_predictions, lossandaccuracy
 from utils import getSeg_metrics, getPoint_metric, generateImageGrid, unnormPts
-from utils import points_to_heatmap, getAng_metric
+from utils import getAng_metric
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
@@ -32,7 +32,7 @@ if __name__ == '__main__':
 
     device=torch.device("cuda")
     torch.cuda.manual_seed(12)
-    if False:#torch.cuda.device_count() > 1:
+    if torch.cuda.device_count() > 1:
         print('Moving to a multiGPU setup.')
         args.useMultiGPU = True
     else:
@@ -148,8 +148,7 @@ if __name__ == '__main__':
         alpha = linVal(epoch, (0, args.epochs), (0, 1), 0)
 
         for bt, batchdata in enumerate(trainloader):
-            img, labels, spatialWeights, distMap, pupil_center, iris_center, elPts, elNorm, cond, imInfo = batchdata
-            hMaps = points_to_heatmap(elPts, 2, img.shape[2:])
+            img, labels, spatialWeights, distMap, pupil_center, iris_center, elNorm, cond, imInfo = batchdata
 
             model.toggle = False
             optimizer.zero_grad()
@@ -171,8 +170,6 @@ if __name__ == '__main__':
                     out_tup = model(img.to(device).to(args.prec),
                                     labels.to(device).long(),
                                     pupil_center.to(device).to(args.prec),
-                                    hMaps.to(device).to(args.prec),
-                                    elPts.to(device).to(args.prec),
                                     elNorm.to(device).to(args.prec),
                                     spatialWeights.to(device).to(args.prec),
                                     distMap.to(device).to(args.prec),
@@ -196,8 +193,6 @@ if __name__ == '__main__':
             out_tup = model(img.to(device).to(args.prec),
                             labels.to(device).long(),
                             pupil_center.to(device).to(args.prec),
-                            hMaps.to(device).to(args.prec),
-                            elPts.to(device).to(args.prec),
                             elNorm.to(device).to(args.prec),
                             spatialWeights.to(device).to(args.prec),
                             distMap.to(device).to(args.prec),
@@ -208,6 +203,17 @@ if __name__ == '__main__':
 
             loss = loss.mean() if args.useMultiGPU else loss
             loss.backward()
+            
+            ''' GENERALLY NOT NEEDED
+            total_norm = 0.0
+            for p in model.parameters():
+                param_norm = p.grad.data.norm(2)
+                total_norm += param_norm.item() ** 2
+            total_norm = total_norm ** (1. / 2)
+            print('Total norm: {}'.format(total_norm))
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 100.0)
+            '''
+            
             optimizer.step()
 
             # Predicted centers
@@ -226,7 +232,7 @@ if __name__ == '__main__':
             # Center distance
             ptDist_iri = getPoint_metric(iris_center.numpy(),
                                          pred_c_iri,
-                                         cond[:,0].numpy(),
+                                         cond[:,1].numpy(),
                                          img.shape[2:],
                                          True)[0] # Unnormalizes the points
             ptDist_pup = getPoint_metric(pupil_center.numpy(),
@@ -270,7 +276,6 @@ if __name__ == '__main__':
                 # Generate image grid with overlayed predicted data
                 dispI = generateImageGrid(img.squeeze().numpy(),
                           predict.numpy(),
-                          hMaps.detach().cpu().numpy(),
                           elOut.detach().cpu().numpy().reshape(-1, 2, 5),
                           pup_c,
                           cond.numpy(),
@@ -292,7 +297,6 @@ if __name__ == '__main__':
         # Sketch the very last batch. Training has dropped uneven batches..
         dispI = generateImageGrid(img.squeeze().numpy(),
                                   predict.numpy(),
-                                  hMaps.detach().cpu().numpy(),
                                   elOut.detach().cpu().numpy().reshape(-1, 2, 5),
                                   pup_c,
                                   cond.numpy(),
@@ -363,7 +367,7 @@ if __name__ == '__main__':
             iri_c_dist = np.nanmean(scoreTrack_v['iris']['c_dist'])
             stopMetric = np.mean(ious_valid) + 2 - 2.5e-3*(pup_c_dist + iri_c_dist) # Max value 3
         else:
-            stopMetric = 1 - pup_c_dist # Max value 1
+            stopMetric = 1 - (pup_c_dist/400) # Max value 1
         scheduler.step(stopMetric)
         early_stopping(stopMetric, netDict)
 

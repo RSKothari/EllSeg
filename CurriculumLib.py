@@ -40,6 +40,7 @@ class DataLoader_riteyes(Dataset):
         self.path2data = path2data
         self.size = size
         self.sort(sort)
+        self.prec = torch.float32
 
         # Rank datasets by archive ID
         #dsnums = np.unique(self.imList[:, 1], return_inverse=True)[1]
@@ -127,26 +128,40 @@ class DataLoader_riteyes(Dataset):
         for i in range(0, numClasses):
             distMap[i, ...] = one_hot2dist(label.astype(np.uint8)==i)
 
+        # Convert data to torch primitives
         img = (img - img.mean())/img.std()
-        img = torch.from_numpy(img).unsqueeze(0) # Adds a singleton for channels
-        label = MaskToTensor()(label)
-        spatialWeights = torch.from_numpy(spatialWeights)
-        distMap = torch.from_numpy(distMap)
-        cond = torch.from_numpy(cond)
-        pupil_center = torch.from_numpy(pupil_center).to(torch.float32)
-
+        img = torch.from_numpy(img).unsqueeze(0).to(self.prec) # Adds a singleton for channels
+        label = MaskToTensor()(label).to(torch.long)
+        spatialWeights = torch.from_numpy(spatialWeights).to(self.prec)
+        distMap = torch.from_numpy(distMap).to(self.prec)
+        pupil_center = torch.from_numpy(pupil_center).to(torch.float32).to(self.prec)
+        iris_center = torch.from_numpy(elParam[0][:2]).to(self.prec) if not cond[3] else pupil_center.clone()
+        cond = torch.from_numpy(cond).to(self.prec).to(torch.bool)
+        imInfo = torch.from_numpy(imInfo).to(torch.long)
+        
         # Generate pupil and iris information
         H = np.array([[2/img.shape[2], 0, -1], [0, 2/img.shape[1], -1], [0, 0, 1]])
         iris_pts, iris_norm = get_ellipse_info(elParam[0], H, cond[3])
         pupil_pts, pupil_norm = get_ellipse_info(elParam[1], H, cond[2])
 
-        # Iris center - if does not exist, assign the pupil center
-        iris_center = elParam[0][:2] if not cond[3] else pupil_center
-
         elPts = np.stack([iris_pts, pupil_pts], axis=0) # Respect iris first policy
         elNorm = np.stack([iris_norm, pupil_norm], axis=0) # Respect iris first policy
-        imInfo = torch.from_numpy(imInfo)
-
+        
+        elPts = torch.from_numpy(elPts).to(self.prec)
+        elNorm = torch.from_numpy(elNorm).to(self.prec)
+        '''
+        print('...')
+        print(img.type())
+        print(label.type())
+        print(spatialWeights.type())
+        print(pupil_center.type())
+        print(iris_center.type())
+        print(elPts.type())
+        print(elNorm.type())
+        print(cond.type())
+        print(imInfo.type())
+        print('---')
+        '''
         return (img, label, spatialWeights, distMap, pupil_center, iris_center, elPts, elNorm, cond, imInfo)
 
     def readImage(self, idx):

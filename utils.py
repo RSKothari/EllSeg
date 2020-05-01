@@ -168,7 +168,7 @@ def getAng_metric(y_true, y_pred, cond):
     return (np.sum(dist)/np.sum(flag) if np.any(flag) else np.nan,
             dist)
 
-def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, heatmaps=False, override=False, ):
+def generateImageGrid(I, mask, elNorm, pupil_center, cond, heatmaps=False, override=False, ):
     '''
     Parameters
     ----------
@@ -211,11 +211,12 @@ def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, heatmaps=False
 
         if (not cond[i, 1]) or override:
             # If masks exists
+            
             rr, cc = np.where(mask[i, ...] == 1)
             im[rr, cc, ...] = np.array([0, 255, 0]) # Green
             rr, cc = np.where(mask[i, ...] == 2)
             im[rr, cc, ...] = np.array([255, 255, 0]) # Yellow
-
+            
             el_iris = my_ellipse(elNorm[i, 0, ...]).transform(H)[0]
             el_pupil = my_ellipse(elNorm[i, 1, ...]).transform(H)[0]
 
@@ -251,7 +252,8 @@ def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, heatmaps=False
 
             im[rr_i, cc_i, ...] = np.array([0, 0, 255])
             im[rr_p, cc_p, ...] = np.array([255, 0, 0])
-
+            
+            ''' NOT NEEDED - Please ignore
             if heatmaps:
                 irisMaps = np.mean(hMaps[i, 0, ...], axis=0)
                 pupilMaps = np.mean(hMaps[i, 1, ...], axis=0)
@@ -266,6 +268,7 @@ def generateImageGrid(I, mask, hMaps, elNorm, pupil_center, cond, heatmaps=False
                                     0.5,
                                     np.stack([pupilMaps, pupilMaps, pupilMaps], axis=2),
                                     0.5, 0)
+            '''
 
         if (not cond[i, 0]) or override:
             # If pupil center exists
@@ -329,13 +332,10 @@ def lossandaccuracy(args, loader, model, alpha, device):
     latent_codes = []
     with torch.no_grad():
         for bt, batchdata in enumerate(tqdm.tqdm(loader)):
-            img, labels, spatialWeights, distMap, pupil_center, iris_center, elPts, elNorm, cond, imInfo = batchdata
-            hMaps = points_to_heatmap(elPts, 2, img.shape[2:])
+            img, labels, spatialWeights, distMap, pupil_center, iris_center, elNorm, cond, imInfo = batchdata
             op_tup = model(img.to(device).to(args.prec),
                             labels.to(device).long(),
                             pupil_center.to(device).to(args.prec),
-                            hMaps.to(device).to(args.prec),
-                            elPts.to(device).to(args.prec),
                             elNorm.to(device).to(args.prec),
                             spatialWeights.to(device).to(args.prec),
                             distMap.to(device).to(args.prec),
@@ -660,21 +660,14 @@ class regressionModule(torch.nn.Module):
         x = torch.selu(self.c3(x)) # [B, 32, 3, 5]
         x = x.reshape(B, -1)
         x = self.l2(torch.selu(self.l1(x)))
-        if alpha < 0.5:
-            pup_c = self.c_actfunc(x[:, 0:2])
-            pup_param = self.param_actfunc(x[:, 2:4])
-            pup_angle = x[:, 4]
-            iri_c = self.c_actfunc(x[:, 5:7])
-            iri_param = self.param_actfunc(x[:, 7:9])
-            iri_angle = x[:, 9]
-        else:
-            # If alpha>0.5, donot use preset activations, use hardtanh
-            pup_c = F.hardtanh(x[:, 0:2])
-            pup_param = F.hardtanh(x[:, 2:4])
-            pup_angle = x[:, 4]
-            iri_c = F.hardtanh(x[:, 5:7])
-            iri_param = F.hardtanh(x[:, 7:9])
-            iri_angle = x[:, 9]
+
+        pup_c = self.c_actfunc(x[:, 0:2])
+        pup_param = self.param_actfunc(x[:, 2:4])
+        pup_angle = x[:, 4]
+        iri_c = self.c_actfunc(x[:, 5:7])
+        iri_param = self.param_actfunc(x[:, 7:9])
+        iri_angle = x[:, 9]
+
 
         op = torch.cat([pup_c,
                         pup_param,
@@ -682,5 +675,29 @@ class regressionModule(torch.nn.Module):
                         iri_c,
                         iri_param,
                         iri_angle.unsqueeze(1)], dim=1)
-        print(op)
+        #print(op)
         return op
+'''
+class refineModule(torch.nn.Module):
+    def __init__(self, sizes):
+        super(refineModule, self).__init__()
+        ip_feats = sizes['enc']['ip'][0]
+        op_feats = sizes['dec']['op'][-1]
+        self.ref_conv = convBlock(in_c=ip_feats+op_feats+4,
+                            inter_c=32,
+                            out_c=1, F.leaky_relu)
+        self.ref_pup = nn.Linear(320+240, 5)
+'''
+class convBlock(nn.Module):
+    def __init__(self, in_c, inter_c, out_c, actfunc):
+        super(convBlock, self).__init__()
+        self.conv1 = nn.Conv2d(in_c, inter_c, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(inter_c, inter_c, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv2d(inter_c, out_c, kernel_size=3, padding=1)
+        self.actfunc = actfunc
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x) # Remove x if not working properly
+        x = self.conv3(x)
+        x = self.actfunc(x)
+        return x
