@@ -8,9 +8,9 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .utils import normPts, regressionModule, linStack, unnormPts, convBlock
-from .loss import conf_Loss, get_ptLoss, get_seg2ptLoss, get_segLoss
-from .loss import WeightedHausdorffDistance
+from utils import normPts, regressionModule, linStack, unnormPts, convBlock
+from loss import conf_Loss, get_ptLoss, get_seg2ptLoss, get_segLoss
+from loss import WeightedHausdorffDistance
 
 def getSizes(chz, growth, blks=4):
     # This function does not calculate the size requirements for head and tail
