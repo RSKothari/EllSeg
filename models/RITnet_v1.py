@@ -1,20 +1,41 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-Created on Mon Sep  2 11:20:33 2019
+Created on Sat May  2 13:10:53 2020
 
-@author: Shusil Dangi
-
-References:
-    https://github.com/ShusilDangi/DenseUNet-K
-It is a simplied version of DenseNet with U-NET architecture.
-2D implementation
+@author: aayush
 """
-import math
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+@author: rakshit
+"""
 import torch
+import numpy as np
 import torch.nn as nn
-from kornia.geometry.spatial_soft_argmax import SpatialSoftArgmax2d
+import torch.nn.functional as F
 
-from RITEyes_helper.utils import _NonLocalBlock2D, get_loss
-from RITEyes_helper.loss_functions import ElliFit, EllipseLoss
+from utils import normPts, regressionModule, linStack, unnormPts, convBlock
+from loss import conf_Loss, get_ptLoss, get_seg2ptLoss, get_segLoss
+from loss import WeightedHausdorffDistance
+
+
+def getSizes(chz, growth, blks=4):
+    # This function does not calculate the size requirements for head and tail
+
+    # Encoder sizes
+    sizes = {'enc': {'inter':[], 'ip':[], 'op': []},
+             'dec': {'skip':[], 'ip': [], 'op': []}}
+    sizes['enc']['inter'] = np.array([chz*(i+1) for i in range(0, blks)])
+    sizes['enc']['op'] = np.array([np.int(growth*chz*(i+1)) for i in range(0, blks)])
+    sizes['enc']['ip'] = np.array([chz] + [np.int(growth*chz*(i+1)) for i in range(0, blks-1)])
+
+    # Decoder sizes
+    sizes['dec']['skip'] = sizes['enc']['ip'][::-1] + sizes['enc']['inter'][::-1]
+    sizes['dec']['ip'] = sizes['enc']['op'][::-1] #+ sizes['dec']['skip']
+    sizes['dec']['op'] = np.append(sizes['enc']['op'][::-1][1:], chz)
+    return sizes
 
 class DenseNet2D_down_block(nn.Module):
     def __init__(self,input_channels,output_channels,down_size,dropout=False,prob=0):
@@ -52,10 +73,9 @@ class DenseNet2D_down_block(nn.Module):
             out = self.relu(self.conv32(self.conv31(x31)))
         return self.bn(out)
 
-
-class DenseNet2D_up_block_concat(nn.Module):
-    def __init__(self,skip_channels,input_channels,output_channels,up_stride,dropout=False,prob=0):
-        super(DenseNet2D_up_block_concat, self).__init__()
+class DenseNet2D_up_block(nn.Module):
+    def __init__(self,skip_channels,input_channels,output_channels,up_stride=2,dropout=False,prob=0):
+        super(DenseNet2D_up_block, self).__init__()
         self.conv11 = nn.Conv2d(skip_channels+input_channels,output_channels,kernel_size=(1,1),padding=(0,0))
         self.conv12 = nn.Conv2d(output_channels,output_channels,kernel_size=(3,3),padding=(1,1))
         self.conv21 = nn.Conv2d(skip_channels+input_channels+output_channels,output_channels,
@@ -79,49 +99,19 @@ class DenseNet2D_up_block_concat(nn.Module):
             x21 = torch.cat((x,x1),dim=1)
             out = self.relu(self.conv22(self.conv21(x21)))
         return out
+    
 
-class centerPts(nn.Module):
-    def __init__(self, in_channels):
-        super(centerPts, self).__init__()
-        self.opChannels = 2
-
-        self.conv1 = nn.Conv2d(in_channels=in_channels,
-                               out_channels=int(in_channels/2),
-                               kernel_size=3,
-                               padding=0)
-        self.conv2 = nn.Conv2d(in_channels=int(in_channels/2),
-                               out_channels=int(in_channels/4),
-                               kernel_size=3,
-                               padding=0)
-        self.down = torch.nn.AdaptiveMaxPool2d((2, 2),
-                                               return_indices=False)
-
-
-        self.linear_1 = nn.Linear(in_features=in_channels, out_features=64)
-        self.linear_2 = nn.Linear(in_features=64, out_features=4)
-        self.relu = nn.LeakyReLU()
-
-    def forward(self, x):
-        B = x.shape[0]
-        x = self.conv1(x)
-        x = self.conv2(self.relu(x))
-        x = self.down(x)
-        x = x.view(B, -1)
-        x = self.relu(self.linear_1(x))
-        x = self.linear_2(x)
-        return x.view(B, -1, 2) # [B, 4]
-
-class DenseNet2D(nn.Module):
-    def __init__(self,
-                 in_channels=1,
-                 out_channels=24,
+class DenseNet_encoder(nn.Module):
+    def __init__(self, in_channels=1,
+                 out_channels=3,
                  channel_size=32,
+                 actfunc=F.leaky_relu,
+                 norm=nn.BatchNorm2d,
                  concat=True,
                  dropout=False,
                  prob=0):
-        super(DenseNet2D, self).__init__()
-
-        self.nPts = int(out_channels/2)
+        super(DenseNet_encoder, self).__init__()
+   
         self.down_block1 = DenseNet2D_down_block(input_channels=in_channels,
                                                  output_channels=channel_size,
                                                  down_size=None,dropout=dropout,
@@ -145,55 +135,187 @@ class DenseNet2D(nn.Module):
                                                  down_size=(2,2),
                                                  dropout=dropout,
                                                  prob=prob)
+        
+    def forward(self, x):
+        self.x1 = self.down_block1(x)
+        self.x2 = self.down_block2(self.x1)
+        self.x3 = self.down_block3(self.x2)
+        self.x4 = self.down_block4(self.x3)
+        self.x5 = self.down_block5(self.x4)
+        return self.x4,self.x3,self.x2,self.x1,self.x5 
+#%%
+class DenseNet_decoder(nn.Module):
+    def __init__(self, in_channels=1,
+                 out_channels=3,
+                 channel_size=32,
+                 actfunc=F.leaky_relu,
+                 norm=nn.BatchNorm2d,
+                 concat=True,
+                 dropout=False,
+                 prob=0):
+        super(DenseNet_decoder, self).__init__()
 
-        self.up_block1 = DenseNet2D_up_block_concat(skip_channels=channel_size,
-                                                    input_channels=channel_size,
-                                                    output_channels=channel_size,
-                                                    up_stride=(2,2),
-                                                    dropout=dropout,
-                                                    prob=prob)
-        self.up_block2 = DenseNet2D_up_block_concat(skip_channels=channel_size,
-                                                    input_channels=channel_size,
-                                                    output_channels=channel_size,
-                                                    up_stride=(2,2),
-                                                    dropout=dropout,
-                                                    prob=prob)
-        self.up_block3 = DenseNet2D_up_block_concat(skip_channels=channel_size,
-                                                    input_channels=channel_size,
-                                                    output_channels=channel_size,
-                                                    up_stride=(2,2),
-                                                    dropout=dropout,
-                                                    prob=prob)
-        self.up_block4 = DenseNet2D_up_block_concat(skip_channels=channel_size,
-                                                    input_channels=channel_size,
-                                                    output_channels=channel_size,
-                                                    up_stride=(2,2),
-                                                    dropout=dropout,
-                                                    prob=prob)
+        self.up_block1 = DenseNet2D_up_block(skip_channels=channel_size,
+                                             input_channels=channel_size,
+                                             output_channels=channel_size,
+                                             up_stride=(2,2),
+                                             dropout=dropout,
+                                             prob=prob)
+        self.up_block2 = DenseNet2D_up_block(skip_channels=channel_size,
+                                             input_channels=channel_size,
+                                             output_channels=channel_size,
+                                             up_stride=(2,2),
+                                             dropout=dropout,
+                                             prob=prob)
+        self.up_block3 = DenseNet2D_up_block(skip_channels=channel_size,
+                                             input_channels=channel_size,
+                                             output_channels=channel_size,
+                                             up_stride=(2,2),
+                                             dropout=dropout,
+                                             prob=prob)
+        self.up_block4 = DenseNet2D_up_block(skip_channels=channel_size,
+                                             input_channels=channel_size,
+                                             output_channels=channel_size,
+                                             up_stride=(2,2),
+                                             dropout=dropout,
+                                             prob=prob)
 
-        self.out_conv1 = nn.Conv2d(in_channels=channel_size,
-                                   out_channels=out_channels + 4,
+        self.final = nn.Conv2d(in_channels=channel_size,
+                                   out_channels=out_channels,
                                    kernel_size=1,
-                                   padding=0)
+                                   padding=0)        
 
-        self.attn = _NonLocalBlock2D(in_channels=channel_size, sub_sample=False)
+    def forward(self, skip4, skip3, skip2, skip1, x):
+         x = self.up_block4(skip4, x)
+         x = self.up_block3(skip3, x)
+         x = self.up_block2(skip2, x)
+         x = self.up_block1(skip1, x)
+         o = self.final(x)
+         return o
 
-        self.concat = concat
 
-        self.temperature = torch.nn.Parameter(torch.zeros(1,).cuda())
-        self.softargmax = SpatialSoftArgmax2d(temperature = self.temperature,
-                                              normalized_coordinates=True)
-        self.distLoss = nn.SmoothL1Loss()
-        self.segLoss = get_loss(nChannels=4)
-        self.elFit = ElliFit(OP_pts=12, temperature=self.temperature)
+
+class DenseNet2D(nn.Module):
+    def __init__(self,
+                 chz=32,
+                 growth=1.2,
+                 actfunc=F.leaky_relu,
+                 norm=nn.BatchNorm2d,
+                 selfCorr=False,
+                 disentangle=False,
+                 dropout=True,
+                 prob=0.2):
+        super(DenseNet2D, self).__init__()
+
+        self.sizes = getSizes(chz, growth)
+
+        self.toggle = True
+        self.selfCorr = selfCorr
+        self.disentangle = disentangle
+        self.disentangle_alpha = 2
+
+        self.wHauss = WeightedHausdorffDistance(240, 320, return_2_terms=False)
+
+        self.enc = DenseNet_encoder(in_channels=1, 
+                                    out_channels=3, 
+                                    channel_size=chz,
+                                    actfunc=actfunc, 
+                                    norm=norm,
+                                    concat=True,
+                                    dropout=False,
+                                    prob=0)
+        self.dec = DenseNet_decoder(in_channels=1, 
+                                    out_channels=3, 
+                                    channel_size=chz,
+                                    actfunc=actfunc, 
+                                    norm=norm,
+                                    concat=True,
+                                    dropout=False,
+                                    prob=0)
+        self.elReg = regressionModule(self.sizes)
 
         self._initialize_weights()
+
+
+    def setDatasetInfo(self, numSets=2):
+        # Produces a 1 layered MLP which directly maps bottleneck to the DS ID
+        self.numSets = numSets
+        self.dsIdentify_lin = linStack(num_layers=2,
+                                       in_dim=self.sizes['enc']['op'][-1],
+                                       hidden_dim=64,
+                                       out_dim=numSets,
+                                       bias=True,
+                                       actBool=False,
+                                       dp=0.0)
+
+    def forward(self,
+                x, # Input batch of images [B, 1, H, W]
+                target, # Target semantic output of 3 classes [B, H, W]
+                pupil_center, # Pupil center [B, 2]
+                elNorm, # Normalized ellipse parameters [B, 2, 5]
+                spatWts, # Spatial weights for segmentation loss (boundary loss) [B, H, W]
+                distMap, # Distance map for segmentation loss (surface loss) [B, 3, H, W]
+                cond, # A condition array for each entry which marks its status [B, 4]
+                ID, # A Tensor containing information about the dataset or subset a entry
+                alpha): # Alpha score for various loss curicullum
+
+        B, _, H, W = x.shape
+        x4, x3, x2, x1, x = self.enc(x)
+        latent = torch.mean(x.flatten(start_dim=2), -1) # [B, features]
+        elOut = self.elReg(x, alpha) # Linear regression to ellipse parameters
+        op = self.dec(x4, x3, x2, x1, x)
+
+        #%% Weighted Hauss Loss
+        dsizes = torch.from_numpy(np.stack([[H/1.]*B, [W/1.]*B], axis=1)).to(x.device)
+        
+        # wHauss expects GT as rows and cols.
+        flag_segSamples = (1 -cond[:,1]).to(torch.float32)
+        num_segSamples = torch.sum(flag_segSamples)
+        loss_wHauss_iri = self.wHauss(torch.sigmoid(op[:,1,...]), # Iris heatmap
+                                      unnormPts(elNorm[:, 0, :2], [H, W])[:, [1, 0]], # Pixel locs
+                                      dsizes)
+        loss_wHauss_iri = torch.sum(loss_wHauss_iri*flag_segSamples)/num_segSamples if num_segSamples else 0.0
+        loss_wHauss_pup = self.wHauss(torch.sigmoid(op[:,-1,...]),
+                                      pupil_center[:, [1, 0]], dsizes)
+        loss_wHauss_pup = loss_wHauss_pup.mean()
+        loss_wHauss = .5*loss_wHauss_pup + .5*loss_wHauss_iri
+
+        #%%
+        op_tup = get_allLoss(op, # Output segmentation map
+                            elOut, # Predicted Ellipse parameters
+                            target, # Segmentation targets
+                            pupil_center, # Pupil center
+                            elNorm, # Normalized ellipse equation
+                            spatWts, # Spatial weights
+                            distMap, # Distance maps
+                            cond, # Condition
+                            ID, # Image and dataset ID
+                            alpha)
+        loss, pred_c_seg = op_tup
+        loss += 5e-3*loss_wHauss
+
+        if self.disentangle:
+            pred_ds = self.dsIdentify_lin(latent)
+            # Disentanglement procedure
+            if self.toggle:
+                # Primary loss + alpha*confusion
+                loss += self.disentangle_alpha*conf_Loss(pred_ds,
+                                                         ID.to(torch.long),
+                                                         self.toggle)
+            else:
+                # Secondary loss
+                loss = conf_Loss(pred_ds, ID.to(torch.long), self.toggle)
+
+        # Uses ellipse center from segmentation but other params from regression
+        elPred = torch.cat([pred_c_seg[:, 0, :], elOut[:, 2:5],
+                            pred_c_seg[:, 1, :], elOut[:, 7:10]], dim=1) # Bx5
+        return op, elPred, latent, loss.unsqueeze(0)
 
     def _initialize_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
+                m.weight.data.normal_(0, np.sqrt(2. / n))
                 if m.bias is not None:
                     m.bias.data.zero_()
             elif isinstance(m, nn.BatchNorm2d):
@@ -204,48 +326,56 @@ class DenseNet2D(nn.Module):
                 m.weight.data.normal_(0, 0.01)
                 m.bias.data.zero_()
 
-    def forward(self, x, heatmaps, gtPts, Phi, spatWt, maxDist, labels, alpha, isTest):
-        B, C, H, W = x.shape
-        self.x1 = self.down_block1(x)
-        self.x2 = self.down_block2(self.x1)
-        self.x3 = self.down_block3(self.x2)
-        self.x4 = self.down_block4(self.x3)
-        self.x5 = self.down_block5(self.x4)
-        self.x5 = self.attn(self.x5) + self.x5
-        self.x6 = self.up_block1(self.x4,self.x5)
-        self.x7 = self.up_block2(self.x3,self.x6)
-        self.x8 = self.up_block3(self.x2,self.x7)
-        self.x9 = self.up_block4(self.x1,self.x8)
-        out = self.out_conv1(self.x9)
+def get_allLoss(op, # Network output
+                elOut, # Network ellipse regression output
+                target, # Segmentation targets
+                pupil_center, # Pupil center
+                elNorm, # Normalized ellipse parameters
+                spatWts,
+                distMap,
+                cond, # Condition matrix, 0 represents modality exists
+                ID,
+                alpha):
 
-        # Segmentation loss
-        segOp = out[:, :4, ...] # Segmentation outputs
-        loss_seg = self.segLoss(segOp, labels, spatWt, maxDist, alpha)
+    B, C, H, W = op.shape
+    loc_onlyMask = (1 -cond[:,1]).to(torch.float32) # GT mask present (True means mask exist)
+    loc_onlyMask.requires_grad = False # Ensure no accidental backprop
+    
+    # Segmentation to pupil center loss using center of mass
+    l_seg2pt_pup, pred_c_seg_pup = get_seg2ptLoss(op[:, 2, ...],
+                                                  normPts(pupil_center,
+                                                  target.shape[1:]), temperature=1)
+    l_seg2pt_pup = torch.mean(l_seg2pt_pup)
+    
+    # Segmentation to iris center loss using center of mass
+    if torch.sum(loc_onlyMask):
+        # Iris center is only present when GT masks are present. Note that
+        # elNorm will hold garbage values. Those samples should not be backprop
+        l_seg2pt_iri, pred_c_seg_iri = get_seg2ptLoss(op[:, 1, ...],
+                                                      elNorm[:, 0, :2], temperature=1)
+        temp = torch.stack([loc_onlyMask, loc_onlyMask], dim=1)
+        l_seg2pt_iri = torch.sum(l_seg2pt_iri*temp)/torch.sum(temp.to(torch.float32))
+        
+    else:
+        # If GT map is absent, loss is set to 0.0
+        # Set Iris and Pupil center to be same
+        l_seg2pt_iri = 0.0
+        pred_c_seg_iri = torch.clone(elOut[:, 5:7])
 
-        '''
-        # Centers from Segmentation masks
-        centers_op, _ = self.softargmax(segOp[:, [2, 3], ...]) # Channels 2 and 3 belong to pupil/iris
-        loss_center = self.distLoss(centers_op, gtPts[:, :, -1, :]) # The last point will be the centers
+    pred_c_seg = torch.stack([pred_c_seg_iri,
+                              pred_c_seg_pup], dim=1) # Iris first policy
+    l_seg2pt = 0.5*l_seg2pt_pup + 0.5*l_seg2pt_iri
 
-        # Iris points
-        irisPhi, irisPts, irisMap = self.elFit(out[:, 4:(12+4), ...], gtPts[:, 0, :-1, :])
+    # Segmentation loss -> backbone loss
+    l_seg = get_segLoss(op, target, spatWts, distMap, loc_onlyMask, alpha)
 
-        # Pupil points
-        pupilPhi, pupilPts, pupilMap = self.elFit(out[:, (12+4):, ...], gtPts[:, 1, :-1, :])
+    # Bottleneck ellipse losses
+    # NOTE: This loss is only activated when normalized ellipses do not exist
+    l_pt = get_ptLoss(elOut[:, 5:7], normPts(pupil_center, target.shape[1:]), 1-loc_onlyMask)
+    
+    # Compute ellipse losses - F1 loss for valid samples
+    l_ellipse = get_ptLoss(elOut, elNorm.view(-1, 10), loc_onlyMask)
 
-        # Ellipse points loss
-        loss_pts = self.distLoss(irisPts, gtPts[:, 0, :-1, :]) + \
-                    self.distLoss(pupilPts, gtPts[:, 1, :-1, :])
+    total_loss = l_ellipse + l_seg2pt + 20*l_seg + 10*l_pt
 
-        # Phi loss
-        loss_phi = self.distLoss(torch.stack([irisPhi, pupilPhi], dim=1),
-                                 Phi)
-
-        # Heat map loss
-        loss_heat = self.distLoss(irisMap, heatmaps[:, 0, :-1, ...]) + \
-                    self.distLoss(pupilMap, heatmaps[:, 1, :-1, ...])
-
-        '''
-        loss = loss_seg# + loss_heat + loss_center + loss_pts#+ loss_phi
-        return segOp, loss#, irisPts, pupilPts, centers_op
-
+    return (total_loss, pred_c_seg)
