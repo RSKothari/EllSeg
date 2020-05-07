@@ -8,7 +8,7 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils import normPts, regressionModule, linStack, unnormPts, convBlock
+from utils import normPts, regressionModule, linStack, convBlock
 from loss import conf_Loss, get_ptLoss, get_seg2ptLoss, get_segLoss
 from loss import WeightedHausdorffDistance
 
@@ -54,8 +54,7 @@ class DenseNet2D_down_block(nn.Module):
         self.TD = Transition_down(inter_c+in_c, op_c, down_size, norm, actfunc)
 
     def forward(self, x):
-        x = self.bn(x) # Batch-nrom
-        x1 = self.actfunc(self.conv1(x))
+        x1 = self.actfunc(self.conv1(self.bn(x)))
         x21 = torch.cat([x, x1], dim=1)
         x22 = self.actfunc(self.conv22(self.conv21(x21)))
         x31 = torch.cat([x21, x22], dim=1)
@@ -122,12 +121,11 @@ class DenseNet_encoder(nn.Module):
                                                  actfunc=actfunc)
     def forward(self, x):
         x = self.head(x) # chz
-        head_op = torch.clone(x)
         skip_1, x = self.down_block1(x) # chz
         skip_2, x = self.down_block2(x) # 2 chz
         skip_3, x = self.down_block3(x) # 4 chz
         skip_4, x = self.down_block4(x) # 8 chz
-        return skip_4, skip_3, skip_2, skip_1, x, head_op
+        return skip_4, skip_3, skip_2, skip_1, x
 
 class DenseNet_decoder(nn.Module):
     def __init__(self, chz, out_c, growth, actfunc=F.leaky_relu, norm=nn.BatchNorm2d):
@@ -141,6 +139,7 @@ class DenseNet_decoder(nn.Module):
         self.up_block3 = DenseNet2D_up_block(skipSize[1], ipSize[1], opSize[1], 2, actfunc)
         self.up_block2 = DenseNet2D_up_block(skipSize[2], ipSize[2], opSize[2], 2, actfunc)
         self.up_block1 = DenseNet2D_up_block(skipSize[3], ipSize[3], opSize[3], 2, actfunc)
+
         self.final = convBlock(chz, chz, out_c, actfunc)
 
     def forward(self, skip4, skip3, skip2, skip1, x):
@@ -149,7 +148,7 @@ class DenseNet_decoder(nn.Module):
          x = self.up_block2(skip2, x)
          x = self.up_block1(skip1, x)
          o = self.final(x)
-         return o, x
+         return o
 
 class DenseNet2D(nn.Module):
     def __init__(self,
@@ -192,8 +191,6 @@ class DenseNet2D(nn.Module):
                 x, # Input batch of images [B, 1, H, W]
                 target, # Target semantic output of 3 classes [B, H, W]
                 pupil_center, # Pupil center [B, 2]
-                hMaps, # Heatmaps for iris and pupil landmarks [B, 2, 8, H, W]
-                elPts, # Ellipse points [B, 2, 8, 2]
                 elNorm, # Normalized ellipse parameters [B, 2, 5]
                 spatWts, # Spatial weights for segmentation loss (boundary loss) [B, H, W]
                 distMap, # Distance map for segmentation loss (surface loss) [B, 3, H, W]
@@ -202,41 +199,26 @@ class DenseNet2D(nn.Module):
                 alpha): # Alpha score for various loss curicullum
 
         B, _, H, W = x.shape
-        x4, x3, x2, x1, x, head_op = self.enc(x)
+        x4, x3, x2, x1, x = self.enc(x)
         latent = torch.mean(x.flatten(start_dim=2), -1) # [B, features]
         elOut = self.elReg(x, alpha) # Linear regression to ellipse parameters
-        op, tail_ip = self.dec(x4, x3, x2, x1, x)
-        # head_op -> Output of the head conv blocks
-        # tail_ip -> Input given to the tail conv blocks
-
-        #%% Weighted Hauss Loss
-        dsizes = torch.from_numpy(np.stack([[H/1.]*B, [W/1.]*B], axis=1)).to(x.device)
-        iriMap = torch.softmax(op, dim=1)[:, 1, ...] # Softmax'ed channel
-        pupMap = torch.softmax(op, dim=1)[:, -1, ...] # Softmax'ed channel
-        
-        # wHauss expects GT as rows and cols.
-        loss_wHauss_iri = self.wHauss(iriMap, # Iris heatmap
-                                      unnormPts(elNorm[:, 0, :2], [H, W])[:, [1, 0]], # Pixel locs
-                                      dsizes)
-        loss_wHauss_pup = self.wHauss(pupMap, pupil_center[:, [1, 0]], dsizes)
-
-        loss_wHauss = .5*loss_wHauss_pup + .5*loss_wHauss_iri
+        op = self.dec(x4, x3, x2, x1, x)
 
         #%%
         op_tup = get_allLoss(op, # Output segmentation map
                             elOut, # Predicted Ellipse parameters
                             target, # Segmentation targets
                             pupil_center, # Pupil center
-                            elPts, # Normalized ellipse points
                             elNorm, # Normalized ellipse equation
                             spatWts, # Spatial weights
                             distMap, # Distance maps
                             cond, # Condition
                             ID, # Image and dataset ID
                             alpha)
+        
         loss, pred_c_seg = op_tup
-        loss += 5e-3*loss_wHauss
 
+        #%% 
         if self.disentangle:
             pred_ds = self.dsIdentify_lin(latent)
             # Disentanglement procedure
@@ -252,8 +234,6 @@ class DenseNet2D(nn.Module):
         # Uses ellipse center from segmentation but other params from regression
         elPred = torch.cat([pred_c_seg[:, 0, :], elOut[:, 2:5],
                             pred_c_seg[:, 1, :], elOut[:, 7:10]], dim=1) # Bx5
-        deltaPred = self.refine(head_op, tail_ip, elPred)
-        elPred += deltaPred
         return op, elPred, latent, loss.unsqueeze(0)
 
     def _initialize_weights(self):
@@ -275,7 +255,6 @@ def get_allLoss(op, # Network output
                 elOut, # Network ellipse regression output
                 target, # Segmentation targets
                 pupil_center, # Pupil center
-                elPts, # Ellipse points
                 elNorm, # Normalized ellipse parameters
                 spatWts,
                 distMap,
@@ -284,28 +263,31 @@ def get_allLoss(op, # Network output
                 alpha):
 
     B, C, H, W = op.shape
-    loc_onlyMask = ~(cond[:, 1].to(torch.bool)) # GT mask present (True means mask exist)
+    loc_onlyMask = (1 -cond[:,1]).to(torch.float32) # GT mask present (True means mask exist)
     loc_onlyMask.requires_grad = False # Ensure no accidental backprop
     
     # Segmentation to pupil center loss using center of mass
     l_seg2pt_pup, pred_c_seg_pup = get_seg2ptLoss(op[:, 2, ...],
                                                   normPts(pupil_center,
-                                                          target.shape[1:]), temperature=1)
-    l_seg2pt_pup = torch.mean(l_seg2pt_pup.sum(dim=1))
+                                                  target.shape[1:]), temperature=16)
     
     # Segmentation to iris center loss using center of mass
     if torch.sum(loc_onlyMask):
         # Iris center is only present when GT masks are present. Note that
         # elNorm will hold garbage values. Those samples should not be backprop
-        iriMap = op[:, 1, ...]
+        iriMap = -op[:, 0, ...] # Inverse of background mask
         l_seg2pt_iri, pred_c_seg_iri = get_seg2ptLoss(iriMap,
-                                                      elNorm[:, 0, :2], temperature=1)
-        l_seg2pt_iri = torch.sum(l_seg2pt_iri.sum(dim=1)*loc_onlyMask)/torch.sum(loc_onlyMask.to(torch.float32))
+                                                      elNorm[:, 0, :2],
+                                                      temperature=16)
+        temp = torch.stack([loc_onlyMask, loc_onlyMask], dim=1)
+        l_seg2pt_iri = torch.sum(l_seg2pt_iri*temp)/torch.sum(temp.to(torch.float32))
+        l_seg2pt_pup = torch.mean(l_seg2pt_pup)
         
     else:
         # If GT map is absent, loss is set to 0.0
         # Set Iris and Pupil center to be same
         l_seg2pt_iri = 0.0
+        l_seg2pt_pup = torch.mean(l_seg2pt_pup)
         pred_c_seg_iri = torch.clone(elOut[:, 5:7])
 
     pred_c_seg = torch.stack([pred_c_seg_iri,
@@ -317,11 +299,12 @@ def get_allLoss(op, # Network output
 
     # Bottleneck ellipse losses
     # NOTE: This loss is only activated when normalized ellipses do not exist
-    l_pt = get_ptLoss(elOut[:, 5:7], normPts(pupil_center, target.shape[1:]), ~loc_onlyMask)
+    l_pt = get_ptLoss(elOut[:, 5:7], normPts(pupil_center,
+                                             target.shape[1:]), 1-loc_onlyMask)
     
     # Compute ellipse losses - F1 loss for valid samples
     l_ellipse = get_ptLoss(elOut, elNorm.view(-1, 10), loc_onlyMask)
 
-    total_loss = l_ellipse + l_seg2pt + 20*l_seg + alpha*(10*l_pt)
+    total_loss = l_ellipse + l_seg2pt + 20*l_seg + 10*l_pt
 
     return (total_loss, pred_c_seg)

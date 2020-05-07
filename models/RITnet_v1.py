@@ -16,7 +16,7 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils import normPts, regressionModule, linStack, unnormPts, convBlock
+from utils import normPts, regressionModule, linStack, unnormPts
 from loss import conf_Loss, get_ptLoss, get_seg2ptLoss, get_segLoss
 from loss import WeightedHausdorffDistance
 

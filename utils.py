@@ -375,11 +375,11 @@ def lossandaccuracy(args, loader, model, alpha, device):
             gt_ab = elNorm[:, 0, 2:4]
             pred_ab = elOut[:, 2:4].cpu().detach()
             scale_iri = torch.sqrt(torch.sum(gt_ab**2, dim=1)/torch.sum(pred_ab**2, dim=1))
-            scale_iri = torch.sum(scale_iri*(~cond[:,1]).to(scale_iri.type())).item()
+            scale_iri = torch.sum(scale_iri*(~cond[:,1]).to(torch.float32)).item()
             gt_ab = elNorm[:, 1, 2:4]
             pred_ab = elOut[:, 7:9].cpu().detach()
             scale_pup = torch.sqrt(torch.sum(gt_ab**2, dim=1)/torch.sum(pred_ab**2, dim=1))
-            scale_pup = torch.sum(scale_pup*(~cond[:,1]).to(scale_pup.type())).item()
+            scale_pup = torch.sum(scale_pup*(~cond[:,1]).to(torch.float32)).item()
 
             predict = get_predictions(output)
             iou = getSeg_metrics(labels.numpy(),
