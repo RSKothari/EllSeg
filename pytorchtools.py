@@ -37,7 +37,7 @@ class EarlyStopping:
         self.best_score = None
         self.early_stop = False
         self.val_loss_min = np.Inf if mode == 'min' else -np.Inf
-        self.delta = delta if mode == 'max' else -delta
+        self.delta = delta
         self.path2save = path2save
         self.fName = fName
         self.mode = mode

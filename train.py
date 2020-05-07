@@ -32,7 +32,8 @@ if __name__ == '__main__':
 
     device=torch.device("cuda")
     torch.cuda.manual_seed(12)
-    if False:#torch.cuda.device_count() > 1:
+    
+    if torch.cuda.device_count() > 1:
         print('Moving to a multiGPU setup.')
         args.useMultiGPU = True
     else:
@@ -86,6 +87,12 @@ if __name__ == '__main__':
     else:
         # If the very first epoch, then save out an _init pickle
         # This is particularly useful for lottery tickets
+        if os.path.exists(os.path.join(os.getcwd(), 'pretrained.pt')):
+            print('Searching for pretrained weights ...')
+            netDict = torch.load(os.path.join(os.getcwd(), 'pretrained.pt'))
+            model.load_state_dict(netDict)
+        else:
+            print('No pretrained. Warning. Training on only pupil centers leads to instability.')
         startEp = 0
         torch.save(model.state_dict(), os.path.join(path2model, args.model+'{}.pkl'.format('_init')))
 
@@ -149,7 +156,7 @@ if __name__ == '__main__':
 
         for bt, batchdata in enumerate(trainloader):
             img, labels, spatialWeights, distMap, pupil_center, iris_center, elNorm, cond, imInfo = batchdata
-
+            
             model.toggle = False
             optimizer.zero_grad()
 
@@ -253,11 +260,11 @@ if __name__ == '__main__':
             gt_ab = elNorm[:, 0, 2:4]
             pred_ab = elOut[:, 2:4].cpu().detach()
             scale_iri = torch.sqrt(torch.sum(gt_ab**2, dim=1)/torch.sum(pred_ab**2, dim=1))
-            scale_iri = torch.sum(scale_iri*~cond[:,1]).item()
+            scale_iri = torch.sum(scale_iri*(~cond[:,1]).to(scale_iri.type()).item()
             gt_ab = elNorm[:, 1, 2:4]
             pred_ab = elOut[:, 7:9].cpu().detach()
             scale_pup = torch.sqrt(torch.sum(gt_ab**2, dim=1)/torch.sum(pred_ab**2, dim=1))
-            scale_pup = torch.sum(scale_pup*~cond[:,1]).item()
+            scale_pup = torch.sum(scale_pup*(~cond[:,1]).to(scale_pup.type())).item()
 
             # Append to score dictionary
             scoreTrack['iris']['c_dist'].append(ptDist_iri)
@@ -323,8 +330,8 @@ if __name__ == '__main__':
                                           'valid':np.nanmean(scoreTrack_v['iris']['ang_dist'])}, epoch)
         writer.add_scalars('iri_ang/std', {'train':np.nanstd(scoreTrack['iris']['ang_dist']),
                                           'valid':np.nanstd(scoreTrack_v['iris']['ang_dist'])}, epoch)
-        writer.add_scalars('iri_sc/mu', {'train':np.nanmean(scoreTrack['iris']['ang_dist']),
-                                          'valid':np.nanmean(scoreTrack_v['iris']['ang_dist'])}, epoch)
+        writer.add_scalars('iri_sc/mu', {'train':np.nanmean(scoreTrack['iris']['sc_rat']),
+                                          'valid':np.nanmean(scoreTrack_v['iris']['sc_rat'])}, epoch)
         writer.add_scalars('iri_sc/std', {'train':np.nanstd(scoreTrack['iris']['sc_rat']),
                                           'valid':np.nanstd(scoreTrack_v['iris']['sc_rat'])}, epoch)
 
@@ -337,8 +344,8 @@ if __name__ == '__main__':
                                           'valid':np.nanmean(scoreTrack_v['pupil']['ang_dist'])}, epoch)
         writer.add_scalars('pup_ang/std', {'train':np.nanstd(scoreTrack['pupil']['ang_dist']),
                                           'valid':np.nanstd(scoreTrack_v['pupil']['ang_dist'])}, epoch)
-        writer.add_scalars('pup_sc/mu', {'train':np.nanmean(scoreTrack['pupil']['ang_dist']),
-                                          'valid':np.nanmean(scoreTrack_v['pupil']['ang_dist'])}, epoch)
+        writer.add_scalars('pup_sc/mu', {'train':np.nanmean(scoreTrack['pupil']['sc_rat']),
+                                          'valid':np.nanmean(scoreTrack_v['pupil']['sc_rat'])}, epoch)
         writer.add_scalars('pup_sc/std', {'train':np.nanstd(scoreTrack['pupil']['sc_rat']),
                                           'valid':np.nanstd(scoreTrack_v['pupil']['sc_rat'])}, epoch)
 
@@ -372,7 +379,7 @@ if __name__ == '__main__':
         early_stopping(stopMetric, netDict)
 
         if early_stopping.early_stop:
-            torch.save(netDict, os.path.join(path2model, args.model + 'earlystop_{}.pkl'.format(epoch)))
+            torch.save(netDict, os.path.join(path2model, args.model + '_earlystop_{}.pkl'.format(epoch)))
             print("Early stopping")
             break
 

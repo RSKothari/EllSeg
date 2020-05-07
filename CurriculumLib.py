@@ -147,19 +147,6 @@ class DataLoader_riteyes(Dataset):
         elNorm = np.stack([iris_norm, pupil_norm], axis=0) # Respect iris first policy
         
         elNorm = torch.from_numpy(elNorm).to(self.prec)
-        '''
-        print('...')
-        print(img.type())
-        print(label.type())
-        print(spatialWeights.type())
-        print(pupil_center.type())
-        print(iris_center.type())
-        print(elPts.type())
-        print(elNorm.type())
-        print(cond.type())
-        print(imInfo.type())
-        print('---')
-        '''
         return (img, label, spatialWeights, distMap, pupil_center, iris_center, elNorm, cond, imInfo)
 
     def readImage(self, idx):
