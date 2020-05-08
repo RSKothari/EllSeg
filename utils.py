@@ -692,12 +692,11 @@ class convBlock(nn.Module):
     def __init__(self, in_c, inter_c, out_c, actfunc):
         super(convBlock, self).__init__()
         self.conv1 = nn.Conv2d(in_c, inter_c, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv2d(inter_c, inter_c, kernel_size=3, padding=1)
-        self.conv3 = nn.Conv2d(inter_c, out_c, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(inter_c, out_c, kernel_size=3, padding=1)
         self.actfunc = actfunc
+        self.bn = torch.nn.BatchNorm2d(num_features=out_c)
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.conv2(x) # Remove x if not working properly
-        x = self.conv3(x)
-        x = self.actfunc(x)
+        x = self.actfunc(self.conv1(x))
+        x = self.actfunc(self.conv2(x)) # Remove x if not working properly
+        x = self.bn(x)
         return x

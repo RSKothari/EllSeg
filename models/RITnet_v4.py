@@ -119,12 +119,19 @@ class DenseNet_encoder(nn.Module):
                                                  down_size=2,
                                                  norm=norm,
                                                  actfunc=actfunc)
+        self.bottleneck = DenseNet2D_down_block(in_c=opSize[3],
+                                                 inter_c=0.25*interSize[3],
+                                                 op_c=opSize[3],
+                                                 down_size=0,
+                                                 norm=norm,
+                                                 actfunc=actfunc)
     def forward(self, x):
         x = self.head(x) # chz
         skip_1, x = self.down_block1(x) # chz
         skip_2, x = self.down_block2(x) # 2 chz
         skip_3, x = self.down_block3(x) # 4 chz
         skip_4, x = self.down_block4(x) # 8 chz
+        _, x = self.bottleneck(x)
         return skip_4, skip_3, skip_2, skip_1, x
 
 class DenseNet_decoder(nn.Module):
