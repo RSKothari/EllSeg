@@ -654,10 +654,10 @@ class regressionModule(torch.nn.Module):
     def forward(self, x, alpha):
         B = x.shape[0]
         # x: [B, 192, H/16, W/16]
-        x = torch.selu(self.c1(x)) # [B, 256, 14, 18]
+        x = F.leaky_relu(self.c1(x)) # [B, 256, 14, 18]
         x = self.max_pool(x) # [B, 256, 7, 9]
-        x = torch.selu(self.c2(x)) # [B, 256, 5, 7]
-        x = torch.selu(self.c3(x)) # [B, 32, 3, 5]
+        x = F.leaky_relu(self.c2(x)) # [B, 256, 5, 7]
+        x = F.leaky_relu(self.c3(x)) # [B, 32, 3, 5]
         x = x.reshape(B, -1)
         x = self.l2(torch.selu(self.l1(x)))
 

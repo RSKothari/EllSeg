@@ -497,6 +497,12 @@ def get_ellipse_info(param, H, cond):
         norm_param = my_ellipse(param).transform(H)[0][:-1] # We don't want the area
         elPts = my_ellipse(norm_param).generatePoints(50, 'equiAngle') # Regular points
         elPts = np.stack(elPts, axis=1)
+        
+        if norm_param[2] > norm_param[3]:
+            # This rotates the ellipse by 90 degrees to ensure param 3 is 
+            # always greater than 2
+            norm_param[[2, 3]] = norm_param[[3, 2]] # Exchange major and minor axis
+            norm_param[-1] = np.unwrap(0.5*np.pi + norm_param[-1])
     else:
         # Ellipse does not exist
         norm_param = -np.ones((5, ))

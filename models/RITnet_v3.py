@@ -276,7 +276,7 @@ def get_allLoss(op, # Network output
     # Segmentation to pupil center loss using center of mass
     l_seg2pt_pup, pred_c_seg_pup = get_seg2ptLoss(op[:, 2, ...],
                                                   normPts(pupil_center,
-                                                  target.shape[1:]), temperature=16)
+                                                  target.shape[1:]), temperature=4)
     
     # Segmentation to iris center loss using center of mass
     if torch.sum(loc_onlyMask):
@@ -285,7 +285,7 @@ def get_allLoss(op, # Network output
         iriMap = -op[:, 0, ...] # Inverse of background mask
         l_seg2pt_iri, pred_c_seg_iri = get_seg2ptLoss(iriMap,
                                                       elNorm[:, 0, :2],
-                                                      temperature=16)
+                                                      temperature=4)
         temp = torch.stack([loc_onlyMask, loc_onlyMask], dim=1)
         l_seg2pt_iri = torch.sum(l_seg2pt_iri*temp)/torch.sum(temp.to(torch.float32))
         l_seg2pt_pup = torch.mean(l_seg2pt_pup)
@@ -312,6 +312,6 @@ def get_allLoss(op, # Network output
     # Compute ellipse losses - F1 loss for valid samples
     l_ellipse = get_ptLoss(elOut, elNorm.view(-1, 10), loc_onlyMask)
 
-    total_loss = l_ellipse + l_seg2pt + 20*l_seg + 10*l_pt
+    total_loss = l_seg2pt + 20*l_seg + 10*(l_pt + l_ellipse)
 
     return (total_loss, pred_c_seg)
