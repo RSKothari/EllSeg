@@ -50,6 +50,12 @@ if __name__ == '__main__':
     path2model = os.path.join(LOGDIR, 'weights')
     path2checkpoint = os.path.join(LOGDIR, 'checkpoints')
     path2writer = os.path.join(LOGDIR, 'TB.lock')
+    path2pretrained = os.path.join(os.getcwd(),
+                                   'logs',
+                                   args.model,
+                                   'pretrained',
+                                   'weights',
+                                   'pretrained.git_ok')
 
     os.makedirs(LOGDIR, exist_ok=True)
     os.makedirs(path2model, exist_ok=True)
@@ -87,9 +93,9 @@ if __name__ == '__main__':
     else:
         # If the very first epoch, then save out an _init pickle
         # This is particularly useful for lottery tickets
-        if os.path.exists(os.path.join(os.getcwd(), 'pretrained.git_ok')):
-            print('Searching for pretrained weights ...')
-            netDict = torch.load(os.path.join(os.getcwd(), 'pretrained.git_ok'))
+        print('Searching for pretrained weights ...')
+        if os.path.exists(path2pretrained):
+            netDict = torch.load(path2pretrained)
             model.load_state_dict(netDict['state_dict'])
             print('Pretrained weights loaded! Enjoy the ride ...')
         else:

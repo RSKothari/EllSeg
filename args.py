@@ -32,7 +32,7 @@ def parse_args():
     parser.add_argument('--curObj', type=str, help='select curriculum to train on', required=True)
     parser.add_argument('--path2data', type=str, default='/media/rakshit/tank', help='path to dataset')
     parser.add_argument('--epochs', type=int, default=100, help='total number of epochs')
-    parser.add_argument('--model', type=str, default='ritnet_v3', help='select model')
+    parser.add_argument('--model', type=str, default='ritnet_v1', help='select model')
     parser.add_argument('--lr', type=float, default=5e-4, help='learning rate')
     parser.add_argument('--batchsize', type=int, default=16, help='select a batchsize')
     parser.add_argument('--resume', type=int, default=0, help='resume?')

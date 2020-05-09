@@ -12,5 +12,5 @@ from models.RITnet_v3 import DenseNet2D as DN_v3
 
 model_dict = {}
 model_dict['ritnet_v1'] = DN_v1()
-model_dict['ritnet_v2'] = DN_v2()
+model_dict['ritnet_v2'] = DN_v2() # Iris and Pupil scheme does not work well
 model_dict['ritnet_v3'] = DN_v3()

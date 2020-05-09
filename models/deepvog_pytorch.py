@@ -62,20 +62,20 @@ class decoding_block(nn.Module):
 
     def forward(self,prev_feature_map, x):
         if prev_feature_map is not None:
-            print (x.shape, prev_feature_map.shape)
+            # print (x.shape, prev_feature_map.shape)
             x = torch.cat((x,prev_feature_map),dim=1)
         x=self.conv1(x)
         x=self.bn1(x)
         x=self.relu(x)
         if self.up_sampling:
-            print ('here')
-            print (x.shape)
+            # print ('here')
+            # print (x.shape)
             x = nn.functional.interpolate(x,scale_factor=self.up_stride,mode='nearest')
-            print (x.shape)
+            # print (x.shape)
             x=self.conv2(x)
             x=self.bn2(x)
             x=self.relu(x)
-            print (x.shape)
+            # print (x.shape)
         return x
 
 
@@ -106,7 +106,7 @@ class DeepVOG_pytorch(nn.Module):
     # Output layer operations
         self.conv1 = nn.Conv2d(self.output_channels*2,3,kernel_size=(1,1),stride=(1,1),padding=(0,0)) #same
         self._initialize_weights()
-        self.softmax=nn.Softmax(dim=None)
+        self.softmax=nn.Softmax(dim=1)
 
     def _initialize_weights(self):
         # Initialize layers exactly as in Keras
