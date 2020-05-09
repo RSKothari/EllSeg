@@ -33,7 +33,7 @@ if __name__ == '__main__':
     device=torch.device("cuda")
     torch.cuda.manual_seed(12)
     
-    if False:#torch.cuda.device_count() > 1:
+    if torch.cuda.device_count() > 1:
         print('Moving to a multiGPU setup.')
         args.useMultiGPU = True
     else:
@@ -114,15 +114,15 @@ if __name__ == '__main__':
     nparams = get_nparams(model)
     print('Total number of trainable parameters: {}\n'.format(nparams))
 
+    patience = 10    
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
                                                            'max',
-                                                           patience=10,
+                                                           patience=patience,
                                                            verbose=True,
                                                            factor=0.005) # Default factor = 0.1
 
-    patience = 5
     early_stopping = EarlyStopping(mode='max',
-                                   delta=0.005,
+                                   delta=0.001,
                                    verbose=True,
                                    patience=patience,
                                    fName='checkpoint.pt',
