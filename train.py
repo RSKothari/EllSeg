@@ -33,7 +33,7 @@ if __name__ == '__main__':
     device=torch.device("cuda")
     torch.cuda.manual_seed(12)
     
-    if torch.cuda.device_count() > 1:
+    if False:#torch.cuda.device_count() > 1:
         print('Moving to a multiGPU setup.')
         args.useMultiGPU = True
     else:
