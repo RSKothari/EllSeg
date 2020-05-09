@@ -11,4 +11,5 @@
 *.mp3
 *__pycache__/*
 *.vscode
-/logs/
+/TB.lock/
+/rc_log/
