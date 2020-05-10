@@ -8,7 +8,7 @@ lr=0.0005
 spack env activate riteyes4
 
 model="ritnet_v1"
-declare -a curObj_list=("NVGaze" "PupilNet" "OpenEDS" "Fuhl" "riteyes-general" "LPW")
+declare -a curObj_list=("NVGaze" "PupilNet" "OpenEDS" "Fuhl" "riteyes_general" "LPW")
 declare -a batchsize_list=("16" "24" "16" "24" "16" "24")
 declare -a selfCorr_list=("0")
 declare -a disentangle_list=("0")
