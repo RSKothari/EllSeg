@@ -8,9 +8,10 @@ This is a pytorch implementation of deepvog
 """
 
 import torch
-import math
 import torch.nn as nn
 import torch.nn.functional as F
+from loss import get_seg2ptLoss
+from utils import normPts
 
 class encoding_block(nn.Module):
 #    def __init__(self,input_channels,output_channels,down_size,dropout=False,prob=0):
@@ -102,12 +103,11 @@ class DeepVOG_pytorch(nn.Module):
         self.up_block4 = decoding_block(skip_channels=self.output_channels*2,input_channels=self.output_channels*8,filter_size=filter_size,\
                         filters_num=self.output_channels*4, layer_num=1, block_type='up', stage=1, s=1)
         self.up_block5 = decoding_block(skip_channels=self.output_channels,input_channels=self.output_channels*4,filter_size=filter_size,\
-                        filters_num=self.output_channels*2, layer_num=1, block_type='up', stage=1, s=1)
+                        filters_num=self.output_channels*2, layer_num=1, block_type='up', stage=1, s=1, up_sampling=False)
     # Output layer operations
         self.conv1 = nn.Conv2d(self.output_channels*2,out_channels,kernel_size=(1,1),stride=(1,1),padding=(0,0)) #same
         self._initialize_weights()
-        self.softmax=nn.Softmax(dim=1) # Only modification, changed dim=1 from None to account for PyTorch version
-
+        
     def _initialize_weights(self):
         # Initialize layers exactly as in Keras
         for m in self.modules():
@@ -135,16 +135,31 @@ class DeepVOG_pytorch(nn.Module):
         self.x7 = self.up_block3(X_Jump3,self.x6) ##64
         self.x8 = self.up_block4(X_Jump2,self.x7) ##32
         self.x9 = self.up_block5(X_Jump1,self.x8) ##32
-        self.x=self.conv1(self.x9)
-        out=self.softmax(self.x)
+        self.x =self.conv1(self.x9)
+        out = self.x
         
-        loss = get_allLoss(out, target)
-        elPred = -torch.ones((B, 10))
-        return out, elPred, self.x4, loss.unsqueeze()
+        loss, pred_c_seg_pup = get_allLoss(out, target, pupil_center, cond)
+        elPred = torch.cat([pred_c_seg_pup, torch.rand(B,3).to(pred_c_seg_pup.device),
+                            pred_c_seg_pup, torch.rand(B,3).to(pred_c_seg_pup.device)],
+                           dim=1) # Bx5
+        embedding = torch.ones(B, 5) # Garbage
+        return out, elPred, embedding, loss.unsqueeze(0)
 
 def get_allLoss(op, # Network output
                 target, # Segmentation targets
+                pupil_center, # Pupil center
+                cond, # Condition
                 ):
+    B = op.shape[0]
+    log_seg_ok = 1-cond[:, 1]
     target = (target == 2).to(torch.long) # 1 for pupil rest 0
-    loss = F.cross_entropy(op, target)
-    return loss
+    l_seg2pt_pup, pred_c_seg_pup = get_seg2ptLoss(op[:, 1, ...],
+                                                  normPts(pupil_center,
+                                                          target.shape[1:]), temperature=4)
+    l_seg = 10*F.cross_entropy(torch.softmax(op, dim=1), target, reduction='none')
+    if torch.sum(log_seg_ok):
+        l_seg = torch.sum(l_seg.reshape(B, -1).mean(dim=1)*log_seg_ok)/torch.sum(log_seg_ok)
+    else:
+        l_seg = 0.0
+    loss = l_seg + torch.mean(l_seg2pt_pup)
+    return loss, pred_c_seg_pup

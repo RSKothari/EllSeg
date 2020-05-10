@@ -224,7 +224,10 @@ class DenseNet2D(nn.Module):
                             alpha)
         
         loss, pred_c_seg = op_tup
-        #loss += 5e-4*loss_wHauss
+        
+        # Uses ellipse center from segmentation but other params from regression
+        elPred = torch.cat([pred_c_seg[:, 0, :], elOut[:, 2:5],
+                            pred_c_seg[:, 1, :], elOut[:, 7:10]], dim=1) # Bx5
 
         if self.disentangle:
             pred_ds = self.dsIdentify_lin(latent)
@@ -238,9 +241,7 @@ class DenseNet2D(nn.Module):
                 # Secondary loss
                 loss = conf_Loss(pred_ds, ID.to(torch.long), self.toggle)
 
-        # Uses ellipse center from segmentation but other params from regression
-        elPred = torch.cat([pred_c_seg[:, 0, :], elOut[:, 2:5],
-                            pred_c_seg[:, 1, :], elOut[:, 7:10]], dim=1) # Bx5
+
         return op, elPred, latent, loss.unsqueeze(0)
 
     def _initialize_weights(self):
@@ -315,3 +316,4 @@ def get_allLoss(op, # Network output
     total_loss = l_ellipse + l_seg2pt + 20*l_seg + 10*l_pt
 
     return (total_loss, pred_c_seg)
+

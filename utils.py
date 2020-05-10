@@ -168,7 +168,13 @@ def getAng_metric(y_true, y_pred, cond):
     return (np.sum(dist)/np.sum(flag) if np.any(flag) else np.nan,
             dist)
 
-def generateImageGrid(I, mask, elNorm, pupil_center, cond, heatmaps=False, override=False, ):
+def generateImageGrid(I,
+                      mask,
+                      elNorm,
+                      pupil_center,
+                      cond,
+                      heatmaps=False,
+                      override=False):
     '''
     Parameters
     ----------
@@ -216,9 +222,6 @@ def generateImageGrid(I, mask, elNorm, pupil_center, cond, heatmaps=False, overr
             im[rr, cc, ...] = np.array([0, 255, 0]) # Green
             rr, cc = np.where(mask[i, ...] == 2)
             im[rr, cc, ...] = np.array([255, 255, 0]) # Yellow
-            
-            el_iris = my_ellipse(elNorm[i, 0, ...]).transform(H)[0]
-            el_pupil = my_ellipse(elNorm[i, 1, ...]).transform(H)[0]
 
             '''
             # Just for experiments. Please ignore.
@@ -235,6 +238,14 @@ def generateImageGrid(I, mask, elNorm, pupil_center, cond, heatmaps=False, overr
             print(rr_i)
             print(cc_i)
             '''
+            
+            try:
+                el_iris = my_ellipse(elNorm[i, 0, ...]).transform(H)[0]
+                el_pupil = my_ellipse(elNorm[i, 1, ...]).transform(H)[0]
+            except:
+                print('Warning: inappropriate ellipses. Defaulting to not break runtime..')
+                el_iris = np.array([W/2, H/2, W/8, H/8, 0.0]).astype(np.float32)
+                el_pupil = np.array([W/2, H/2, W/4, H/4, 0.0]).astype(np.float32)
             [rr_i, cc_i] = ellipse_perimeter(int(el_iris[1]),
                                              int(el_iris[0]),
                                              int(el_iris[3]),
@@ -252,23 +263,6 @@ def generateImageGrid(I, mask, elNorm, pupil_center, cond, heatmaps=False, overr
 
             im[rr_i, cc_i, ...] = np.array([0, 0, 255])
             im[rr_p, cc_p, ...] = np.array([255, 0, 0])
-            
-            ''' NOT NEEDED - Please ignore
-            if heatmaps:
-                irisMaps = np.mean(hMaps[i, 0, ...], axis=0)
-                pupilMaps = np.mean(hMaps[i, 1, ...], axis=0)
-                irisMaps = np.uint8(255*irisMaps/irisMaps.max())
-                pupilMaps = np.uint8(255*pupilMaps/pupilMaps.max())
-
-                im = cv2.addWeighted(im,
-                                    0.5,
-                                    np.stack([irisMaps, irisMaps, irisMaps], axis=2),
-                                    0.5, 0)  # Add Iris to blue
-                im = cv2.addWeighted(im,
-                                    0.5,
-                                    np.stack([pupilMaps, pupilMaps, pupilMaps], axis=2),
-                                    0.5, 0)
-            '''
 
         if (not cond[i, 0]) or override:
             # If pupil center exists
@@ -677,17 +671,7 @@ class regressionModule(torch.nn.Module):
                         iri_angle.unsqueeze(1)], dim=1)
         #print(op)
         return op
-'''
-class refineModule(torch.nn.Module):
-    def __init__(self, sizes):
-        super(refineModule, self).__init__()
-        ip_feats = sizes['enc']['ip'][0]
-        op_feats = sizes['dec']['op'][-1]
-        self.ref_conv = convBlock(in_c=ip_feats+op_feats+4,
-                            inter_c=32,
-                            out_c=1, F.leaky_relu)
-        self.ref_pup = nn.Linear(320+240, 5)
-'''
+
 class convBlock(nn.Module):
     def __init__(self, in_c, inter_c, out_c, actfunc):
         super(convBlock, self).__init__()
@@ -700,3 +684,74 @@ class convBlock(nn.Module):
         x = self.actfunc(self.conv2(x)) # Remove x if not working properly
         x = self.bn(x)
         return x
+    
+class refineModule(nn.Module):
+    def __init__(self, sizes):
+        super(refineModule, self).__init__()
+        self.conv1s_iri = nn.ModuleList([nn.Conv1d(in_channels=sizes['dec']['skip'][i],
+                                                   out_channels=8,
+                                                   kernel_size=1) for i in range(4)])
+        self.conv1s_pup = nn.ModuleList([nn.Conv1d(in_channels=sizes['dec']['skip'][i],
+                                                   out_channels=8,
+                                                   kernel_size=1) for i in range(4)])
+        # Try shared weights first
+        self.convStack = convBlock(in_c=8*4, inter_c=64, out_c=1, actfunc=F.leaky_relu)
+        self.linStack - linStack(num_layers=2,
+                                 in_dim=560,
+                                 hidden_dim=128,
+                                 out_dim=6,
+                                 bias=True,
+                                 actBool=True,
+                                 dp=0.0)
+                
+    def forward(self, elPred, skips):
+        # skips: [smallest to largest]
+        el_iris = elPred[:, :5, ...]
+        el_pupil = elPred[:, 5:, ...]
+        
+        irisMaps = []
+        pupilMaps = []
+        for sc, skip in enumerate(skips):
+            B, C, H, W = skips[-1].shape
+            mesh = create_meshgrid(height=H,
+                                   width=W,
+                                   normalized_coordinates=True)
+            mesh.requires_grad = False
+            mesh = torch.cat([mesh for i in range(B)], dim=0) # B, H, W, 2
+            
+            # Iris wtMap
+            X = (mesh[..., 0].squeeze() - el_iris[:, 0])*torch.cos(el_iris[:, -1])+\
+                (mesh[..., 1].squeeze() - el_iris[:, 1])*torch.sin(el_iris[:, -1])
+            Y = -(mesh[..., 0].squeeze() - el_iris[:, 0])*np.sin(el_iris[:, -1])+\
+                 (mesh[..., 1].squeeze() - el_iris[:, 1])*np.cos(el_iris[:, -1])
+            wtMat_iris = 1 - (X/el_iris[:, 2])**2 - (Y/el_iris[:, 3])**2
+            wtMat_iris = soft_heaviside(wtMat_iris, 8, mode=3)
+            
+            # Pupil wtMap
+            X = (mesh[..., 0].squeeze() - el_pupil[:, 0])*torch.cos(el_pupil[:, -1])+\
+                (mesh[..., 1].squeeze() - el_pupil[:, 1])*torch.sin(el_pupil[:, -1])
+            Y = -(mesh[..., 0].squeeze() - el_pupil[:, 0])*np.sin(el_pupil[:, -1])+\
+                 (mesh[..., 1].squeeze() - el_pupil[:, 1])*np.cos(el_pupil[:, -1])
+            wtMat_pupil = 1 - (X/el_pupil[:, 2])**2 - (Y/el_pupil[:, 3])**2
+            wtMat_pupil = soft_heaviside(wtMat_pupil, 8, mode=3)
+            
+            elFeats_iris = skip*torch.stack([wtMat_iris for i in range(C)], dim=1)
+            elFeats_iris = self.conv1s_iri[sc](elFeats_iris)
+            elFeats_pupil = skip*torch.stack([wtMat_pupil for i in range(C)], dim=1)
+            elFeats_pupil = self.conv1s_pup[sc](elFeats_pupil)
+            
+            # Upsample and append maps
+            irisMaps.append(F.interpolate(elFeats_iris, (240, 320), mode='bilinear'))
+            pupilMaps.append(F.interpolate(elFeats_pupil, (240, 320), mode='bilinear'))
+        
+        irisMaps = torch.cat(irisMaps, dim=1) # [B, 32, 240, 320]
+        pupilMaps = torch.cat(pupilMaps, dim=1) # [B, 32, 240, 320]
+        
+        irisMaps = self.convStack(irisMaps).squeeze() # [B, 240, 320]
+        pupilMaps = self.convStack(pupilMaps).squeeze() # [B, 240, 320]
+        
+        irisMaps = torch.cat([irisMaps.sum(dim=1), irisMaps.sum(dim=2)], dim=1) # [B. 560]
+        pupilMaps = torch.cat([pupilMaps.sum(dim=1), pupilMaps.sum(dim=2)], dim=1) # [B, 560]
+        irisCorr = self.linStack(irisMaps)
+        pupilCorr = self.linStack(pupilMaps)
+        elPred[:, [2, 3, 4, 7, 8, 9]] = elPred[:, [2, 3, 4, 7, 8, 9]] + torch.cat([irisCorr])
