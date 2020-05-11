@@ -139,12 +139,12 @@ def conf_Loss(x, gt, flag):
         loss = F.cross_entropy(x, gt)
     return loss
 
-def get_seg2elLoss(opSeg, opEl):
+def get_seg2elLoss(opSeg, opEl, loc_seg_ok):
     # Self correction loss based on regressed ellipse fit. Higher the overlap,
     # the more negative the loss function will be
-    # opSeg: Segmentation output [B, 3, H, W]
-    # dims: Segmentation output dims
+    # opSeg: Segmentation output [B, H, W]
     # opEl: Regressed Ellipse output [B, 5]
+    # loc_seg_ok: Samples with existing segmentation
 
     loss = 0
     B, H, W = opSeg.shape
@@ -154,16 +154,18 @@ def get_seg2elLoss(opSeg, opEl):
     mesh.requires_grad = False
 
     for i in range(0, B):
-        X = (mesh[..., 0] - opEl[i, 0])*torch.cos(opEl[i, -1]) + (mesh[..., 1] - opEl[i, 1])*torch.sin(opEl[i, -1])
-        Y = -(mesh[..., 0] - opEl[i, 0])*torch.sin(opEl[i, -1]) + (mesh[..., 1] - opEl[i, 1])*torch.cos(opEl[i, -1])
-        posmask = ((X/opEl[i, 2])**2 + (Y/opEl[i, 3])**2) - 1
-        negmask = -posmask
-        posmask = soft_heaviside(posmask, sc=8, mode=3) # Positive outside the ellipse
-        negmask = soft_heaviside(negmask, sc=8, mode=3) # Positive inside the ellipse
-        loss = F.binary_cross_entropy(posmask, 1-opSeg[i, ...]) + F.binary_cross_entropy(negmask, opSeg[i, ...])
-        #mask = opSeg[i, ...]*posmask + (1 - opSeg[i, ...])*negmask# Higher overlap means more smaller the value
-        #loss += torch.sum(mask)#/(np.sqrt(H**2 + W**2))
-    return loss/B
+        if loc_seg_ok[i]:
+            X =(mesh[..., 0]-opEl[i, 0])*torch.cos(opEl[i,-1]) +\
+                (mesh[..., 1]-opEl[i, 1])*torch.sin(opEl[i,-1])
+            Y = -(mesh[..., 0]-opEl[i, 0])*torch.sin(opEl[i,-1]) +\
+                (mesh[..., 1]-opEl[i, 1])*torch.cos(opEl[i,-1])
+            posmask = ((X/opEl[i, 2])**2 + (Y/opEl[i, 3])**2) - 1
+            negmask = -posmask
+            posmask = soft_heaviside(posmask, sc=64, mode=3) # Positive outside the ellipse
+            negmask = soft_heaviside(negmask, sc=64, mode=3) # Positive inside the ellipse
+            loss += (F.binary_cross_entropy(posmask,1-opSeg[i, ...]) + \
+                     F.binary_cross_entropy(negmask, opSeg[i, ...]))
+    return loss/torch.sum(loc_seg_ok) if torch.sum(loc_seg_ok) else 0.0
 
 class WeightedHausdorffDistance(nn.Module):
     def __init__(self,

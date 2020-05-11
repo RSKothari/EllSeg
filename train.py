@@ -33,7 +33,7 @@ if __name__ == '__main__':
     device=torch.device("cuda")
     torch.cuda.manual_seed(12)
     
-    if False:#torch.cuda.device_count() > 1:
+    if torch.cuda.device_count() > 1:
         print('Moving to a multiGPU setup.')
         args.useMultiGPU = True
     else:
@@ -117,7 +117,7 @@ if __name__ == '__main__':
     patience = 10    
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
                                                            'max',
-                                                           patience=patience,
+                                                           patience=patience-5,
                                                            verbose=True,
                                                            factor=0.005) # Default factor = 0.1
 

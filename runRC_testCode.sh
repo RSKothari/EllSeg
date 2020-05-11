@@ -9,7 +9,7 @@ spack env activate riteyes4
 
 model="ritnet_v1"
 declare -a curObj_list=("NVGaze" "PupilNet" "OpenEDS" "Fuhl" "riteyes_general" "LPW")
-declare -a batchsize_list=("16" "24" "16" "24" "16" "24")
+declare -a batchsize_list=("16" "16" "16" "16" "16" "16")
 declare -a selfCorr_list=("0")
 declare -a disentangle_list=("0")
 
@@ -23,7 +23,7 @@ do
             baseJobName="RC_e2e_${model}_${curObj_list[i]}_${selfCorr}_${disentangle}"
             str="#!/bin/bash\npython3 train.py --path2data=${path2ds} --expname=${baseJobName} "
             str+="--curObj=${curObj_list[i]} --batchsize=${batchsize} --workers=${workers} --prec=32 --epochs=${epochs} "
-            str+="--disp=0 --overfit=0 --lr=${lr} --selfCorr=${selfCorr} --disentangle=${disentangle} --model=${model}"
+            str+="--disp=0 --overfit=20 --lr=${lr} --selfCorr=${selfCorr} --disentangle=${disentangle} --model=${model}"
             echo $str
             echo -e $str > command.lock
             sbatch -J ${baseJobName} -o "rc_log/system_test/${baseJobName}.o" -e "rc_log/system_test/${baseJobName}.e" --mem=16G --cpus-per-task=9 -p debug -A riteyes --gres=gpu:p4:2 -t 0-5:0:0 command.lock

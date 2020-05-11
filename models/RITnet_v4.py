@@ -8,9 +8,8 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils import normPts, regressionModule, linStack, convBlock
-from loss import conf_Loss, get_ptLoss, get_seg2ptLoss, get_segLoss
-from loss import WeightedHausdorffDistance
+from utils import normPts, regressionModule, linStack, convBlock, refineModule
+from loss import conf_Loss, get_ptLoss, get_seg2ptLoss, get_segLoss, get_seg2elLoss
 
 def getSizes(chz, growth, blks=4):
     # This function does not calculate the size requirements for head and tail
@@ -120,7 +119,7 @@ class DenseNet_encoder(nn.Module):
                                                  norm=norm,
                                                  actfunc=actfunc)
         self.bottleneck = DenseNet2D_down_block(in_c=opSize[3],
-                                                 inter_c=0.25*interSize[3],
+                                                 inter_c=interSize[3],
                                                  op_c=opSize[3],
                                                  down_size=0,
                                                  norm=norm,
@@ -174,13 +173,15 @@ class DenseNet2D(nn.Module):
         self.disentangle = disentangle
         self.disentangle_alpha = 2
 
-        self.wHauss = WeightedHausdorffDistance(240, 320, return_2_terms=False)
-
         self.enc = DenseNet_encoder(in_c=1, chz=chz, actfunc=actfunc, growth=growth, norm=norm)
         self.dec = DenseNet_decoder(chz=chz, out_c=3, actfunc=actfunc, growth=growth, norm=norm)
         self.elReg = regressionModule(self.sizes)
 
         self._initialize_weights()
+        
+    def setEllipseRefine(self, ):
+        print('Generating refinement module ...')
+        self.elRef = refineModule(self.sizes) # First generates an object, then attachs to network
 
 
     def setDatasetInfo(self, numSets=2):
@@ -228,7 +229,17 @@ class DenseNet2D(nn.Module):
         # Uses ellipse center from segmentation but other params from regression
         elPred = torch.cat([pred_c_seg[:, 0, :], elOut[:, 2:5],
                             pred_c_seg[:, 1, :], elOut[:, 7:10]], dim=1) # Bx5
-
+        
+        # Segmentation to ellipse loss
+        loss_seg2el = get_seg2elLoss(target==2, elPred[:, 5:], 1-cond[:,1]) +\
+                        get_seg2elLoss(~(target==0), elPred[:, :5], 1-cond[:,1])
+        loss += loss_seg2el
+        
+        if self.selfCorr:
+            elPred_ref = self.elRef(elPred, [x4, x3, x2, x1])
+            l_elRef = get_ptLoss(elPred_ref, elNorm.view(-1, 10), 1-cond[:,1])
+            loss += 10*l_elRef
+            
         if self.disentangle:
             pred_ds = self.dsIdentify_lin(latent)
             # Disentanglement procedure
@@ -242,7 +253,7 @@ class DenseNet2D(nn.Module):
                 loss = conf_Loss(pred_ds, ID.to(torch.long), self.toggle)
 
 
-        return op, elPred, latent, loss.unsqueeze(0)
+        return op, elPred_ref, latent, loss.unsqueeze(0)
 
     def _initialize_weights(self):
         for m in self.modules():
@@ -277,7 +288,7 @@ def get_allLoss(op, # Network output
     # Segmentation to pupil center loss using center of mass
     l_seg2pt_pup, pred_c_seg_pup = get_seg2ptLoss(op[:, 2, ...],
                                                   normPts(pupil_center,
-                                                  target.shape[1:]), temperature=16)
+                                                          target.shape[1:]), temperature=16)
     
     # Segmentation to iris center loss using center of mass
     if torch.sum(loc_onlyMask):

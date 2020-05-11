@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from utils import normPts, regressionModule, linStack, convBlock
-from loss import conf_Loss, get_ptLoss, get_seg2ptLoss, get_segLoss
+from loss import conf_Loss, get_ptLoss, get_seg2ptLoss, get_segLoss, get_seg2elLoss
 from loss import WeightedHausdorffDistance
 
 def getSizes(chz, growth, blks=4):
@@ -225,6 +225,15 @@ class DenseNet2D(nn.Module):
         
         loss, pred_c_seg = op_tup
 
+        # Uses ellipse center from segmentation but other params from regression
+        elPred = torch.cat([pred_c_seg[:, 0, :], elOut[:, 2:5],
+                            pred_c_seg[:, 1, :], elOut[:, 7:10]], dim=1) # Bx5
+        
+        # Segmentation to ellipse loss
+        loss_seg2el = get_seg2elLoss(target==2, elPred[:, 5:], 1-cond[:,1]) +\
+                        get_seg2elLoss(~(target==0), elPred[:, :5], 1-cond[:,1])
+        loss += loss_seg2el
+        
         #%% 
         if self.disentangle:
             pred_ds = self.dsIdentify_lin(latent)
@@ -238,9 +247,6 @@ class DenseNet2D(nn.Module):
                 # Secondary loss
                 loss = conf_Loss(pred_ds, ID.to(torch.long), self.toggle)
 
-        # Uses ellipse center from segmentation but other params from regression
-        elPred = torch.cat([pred_c_seg[:, 0, :], elOut[:, 2:5],
-                            pred_c_seg[:, 1, :], elOut[:, 7:10]], dim=1) # Bx5
         return op, elPred, latent, loss.unsqueeze(0)
 
     def _initialize_weights(self):
