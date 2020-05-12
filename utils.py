@@ -710,8 +710,8 @@ class refineModule(nn.Module):
                 m.bias.data.zero_()
             elif isinstance(m, nn.Linear):
                 n = m.weight.size(1)
-                # m.weight.data.normal_(0, 0.01)
-                m.weight.data.zero_()
+                m.weight.data.normal_(0, 0.01)
+                # m.weight.data.zero_()
                 m.bias.data.zero_()
                 
     def forward(self, elPred, skips):
@@ -775,5 +775,6 @@ class refineModule(nn.Module):
         
         # Additive correction
         elPred_refined = torch.clone(elPred)
-        elPred_refined[:, [2, 3, 4, 7, 8, 9]] += F.hardtanh(elCorr) # Between -1 and 1
+        elPred_refined[:, [2, 3, 4, 7, 8, 9]] += torch.tanh(elCorr) # Between -1 and 1
+        # print(F.hardtanh(elCorr))
         return elPred_refined

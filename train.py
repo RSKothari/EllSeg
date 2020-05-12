@@ -377,9 +377,12 @@ if __name__ == '__main__':
         netDict['state_dict'] = {k: v for k, v in stateDict.items() if 'dsIdentify_lin' not in k}
 
         pup_c_dist = np.nanmean(scoreTrack_v['pupil']['c_dist'])
+        pup_ang_dist = np.nanmean(scoreTrack_v['pupil']['ang_dist'])
         if not np.isnan(np.mean(ious)):
             iri_c_dist = np.nanmean(scoreTrack_v['iris']['c_dist'])
-            stopMetric = np.mean(ious_valid) + 2 - 2.5e-3*(pup_c_dist + iri_c_dist) # Max value 3
+            iri_ang_dist = np.nanmean(scoreTrack_v['iris']['ang_dist'])
+            stopMetric = np.mean(ious_valid) + 2 - 2.5e-3*(pup_c_dist + iri_c_dist) +\
+                        (1 - pup_ang_dist/90) + (1 - iri_ang_dist/90) # Max value 5
         else:
             stopMetric = 1 - (pup_c_dist/400) # Max value 1
         scheduler.step(stopMetric)

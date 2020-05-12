@@ -33,14 +33,15 @@ if __name__ == '__main__':
     
     # Hard code certain conditions for v4 refinement loss
     args.selfCorr = 1
-    args.batchsize = 32
+    args.batchsize = 42
+    args.workers = 7
     args.model = 'ritnet_v4'
     args.expname = args.curObj
 
     device=torch.device("cuda")
     torch.cuda.manual_seed(12)
     
-    if torch.cuda.device_count() > 1:
+    if False:#torch.cuda.device_count() > 1:
         print('Moving to a multiGPU setup.')
         args.useMultiGPU = True
     else:
@@ -126,7 +127,8 @@ if __name__ == '__main__':
         print('Requesting refinement module ...')
         model.setEllipseRefine()
         print('Ellipse refinement module set! Setting optimizer ...')
-        opt_refine = torch.optim.SGD(model.elRef.parameters(), lr=5*args.lr)
+        opt_refine = torch.optim.Adam(model.elRef.parameters(),
+                                     lr=10*args.lr)
         
         # Set gradient requirement for the rest of the network to False
         for name, param in model.named_parameters():
@@ -138,15 +140,15 @@ if __name__ == '__main__':
     nparams = get_nparams(model)
     print('Total number of trainable parameters: {}\n'.format(nparams))
 
-    patience = 10    
+    patience = 30    
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
                                                            'max',
                                                            patience=patience-5,
                                                            verbose=True,
-                                                           factor=0.005) # Default factor = 0.1
+                                                           factor=0.0005) # Default factor = 0.1
 
     early_stopping = EarlyStopping(mode='max',
-                                   delta=0.001,
+                                   delta=0.0000, # Save the smallest of improvements
                                    verbose=True,
                                    patience=patience,
                                    fName='checkpoint.pt',
@@ -363,9 +365,12 @@ if __name__ == '__main__':
         netDict['state_dict'] = {k: v for k, v in stateDict.items() if 'dsIdentify_lin' not in k}
 
         pup_c_dist = np.nanmean(scoreTrack_v['pupil']['c_dist'])
+        pup_ang_dist = np.nanmean(scoreTrack_v['pupil']['ang_dist'])
         if not np.isnan(np.mean(ious)):
             iri_c_dist = np.nanmean(scoreTrack_v['iris']['c_dist'])
-            stopMetric = np.mean(ious_valid) + 2 - 2.5e-3*(pup_c_dist + iri_c_dist) # Max value 3
+            iri_ang_dist = np.nanmean(scoreTrack_v['iris']['ang_dist'])
+            stopMetric = np.mean(ious_valid) + 2 - 2.5e-3*(pup_c_dist + iri_c_dist) +\
+                        (1 - pup_ang_dist/90) + (1 - iri_ang_dist/90) # Max value 5
         else:
             stopMetric = 1 - (pup_c_dist/400) # Max value 1
         scheduler.step(stopMetric)

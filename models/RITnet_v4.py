@@ -238,7 +238,7 @@ class DenseNet2D(nn.Module):
         if self.selfCorr:
             elPred_ref = self.elRef(elPred, [x4, x3, x2, x1])
             l_elRef = get_ptLoss(elPred_ref, elNorm.view(-1, 10), 1-cond[:,1])
-            loss += 10*l_elRef
+            loss += 100*l_elRef
             
         if self.disentangle:
             pred_ds = self.dsIdentify_lin(latent)
