@@ -24,7 +24,7 @@ for test_mode in "${tests[@]}"
             do
                 batchsize=${batchsize_list[i]}
                 baseJobName="RC_e2e_${test_mode}_${model}_${curObj_list[i]}_${selfCorr}_${disentangle}"
-                str="#!/bin/bash\npython3 train.py --path2data=${path2ds} --expname=${baseJobName} --test_mode=${test_mode}"
+                str="#!/bin/bash\npython3 train.py --path2data=${path2ds} --expname=${baseJobName} --test_mode=${test_mode} "
                 str+="--curObj=${curObj_list[i]} --batchsize=${batchsize} --workers=${workers} --prec=32 --epochs=${epochs} "
                 str+="--disp=0 --overfit=0 --lr=${lr} --selfCorr=${selfCorr} --disentangle=${disentangle} --model=${model}"
                 echo $str
