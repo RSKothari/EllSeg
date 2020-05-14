@@ -21,7 +21,7 @@ sys.path.append('..')
 from helperfunctions import generateEmptyStorage
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--noDisp', help='Specify flag to display labelled images', type=bool)
+parser.add_argument('--noDisp', help='Specify flag to display labelled images', type=int, default=1)
 parser.add_argument('--path2ds', help='Path to dataset', type=str)
 args = parser.parse_args()
 if args.noDisp:

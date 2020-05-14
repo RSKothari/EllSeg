@@ -17,8 +17,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from utils import normPts, regressionModule, linStack
-from loss import conf_Loss, get_ptLoss, get_seg2ptLoss, get_segLoss, get_seg2elLoss
-
+from loss import conf_Loss, get_ptLoss, get_seg2ptLoss, get_segLoss, get_seg2elLoss, get_selfConsistency
 
 def getSizes(chz, growth, blks=4):
     # This function does not calculate the size requirements for head and tail
@@ -98,7 +97,6 @@ class DenseNet2D_up_block(nn.Module):
             x21 = torch.cat((x,x1),dim=1)
             out = self.relu(self.conv22(self.conv21(x21)))
         return out
-    
 
 class DenseNet_encoder(nn.Module):
     def __init__(self, in_channels=1,
@@ -142,7 +140,7 @@ class DenseNet_encoder(nn.Module):
         self.x4 = self.down_block4(self.x3)
         self.x5 = self.down_block5(self.x4)
         return self.x4,self.x3,self.x2,self.x1,self.x5 
-#%%
+    
 class DenseNet_decoder(nn.Module):
     def __init__(self, in_channels=1,
                  out_channels=3,
@@ -191,8 +189,6 @@ class DenseNet_decoder(nn.Module):
          x = self.up_block1(skip1, x)
          o = self.final(x)
          return o
-
-
 
 class DenseNet2D(nn.Module):
     def __init__(self,
@@ -285,6 +281,9 @@ class DenseNet2D(nn.Module):
         loss_seg2el = get_seg2elLoss(target==2, elPred[:, 5:], 1-cond[:,1]) +\
                         get_seg2elLoss(~(target==0), elPred[:, :5], 1-cond[:,1])
         loss += loss_seg2el
+        
+        if self.selfCorr:
+            loss += 10*get_selfConsistency(op, elPred, 1-cond[:, 1])
 
         if self.disentangle:
             pred_ds = self.dsIdentify_lin(latent)
@@ -297,8 +296,6 @@ class DenseNet2D(nn.Module):
             else:
                 # Secondary loss
                 loss = conf_Loss(pred_ds, ID.to(torch.long), self.toggle)
-
-
         return op, elPred, latent, loss.unsqueeze(0)
 
     def _initialize_weights(self):

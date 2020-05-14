@@ -13,7 +13,7 @@ sys.path.append('..')
 from helperfunctions import mypause, generateEmptyStorage
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--noDisp', help='Specify flag to display labelled images', type=int)
+parser.add_argument('--noDisp', help='Specify flag to display labelled images', type=int, default=1)
 parser.add_argument('--path2ds', help='Path to dataset', type=str)
 args = parser.parse_args()
 if args.noDisp:
@@ -112,5 +112,5 @@ for name in list_ds:
         keydict['pupil_loc'] = np.stack(keydict['pupil_loc'], axis=0)
         # Save data
         dd.io.save(os.path.join(PATH_DS, str(ds_name)+'.h5'), Data)
-        scio.savemat(os.path.join(PATH_MASTER, str(ds_name)), keydict, appendmat=True)
+        scio.savemat(os.path.join(PATH_MASTER, str(ds_name)+'.mat'), keydict, appendmat=True)
         ds_num=ds_num+1

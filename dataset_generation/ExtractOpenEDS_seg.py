@@ -35,7 +35,7 @@ def mypause(interval):
             return
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--noDisp', help='Specify flag to display labelled images', type=int)
+parser.add_argument('--noDisp', help='Specify flag to display labelled images', type=int, default=1)
 parser.add_argument('--path2ds', help='Path to dataset', type=str)
 args = parser.parse_args()
 if args.noDisp:
@@ -134,15 +134,15 @@ for dirCond in listDir:
                 model_iris.Phi = np.array([-1, -1, -1, -1, -1])
                 iris_fit_error = np.inf
 
-            if pupil_fit_error > 1.5:
+            if pupil_fit_error >= 0.1:
                 print('Not recording pupil. Unacceptable fit.')
                 print('Pupil fit error: {}'.format(pupil_fit_error))
-                model_pupil.model = np.array([-1, -1, -1, -1, -1]) if pupil_fit_error > 0.1 else model_pupil.model
+                model_pupil.model = np.array([-1, -1, -1, -1, -1])
 
-            if iris_fit_error > 1.5:
+            if iris_fit_error >= 0.1:
                 print('Not recording iris. Unacceptable fit.')
                 print('Iris fit error: {}'.format(iris_fit_error))
-                model_iris.model = np.array([-1, -1, -1, -1, -1]) if iris_fit_error > 0.1 else model_iris.model
+                model_iris.model = np.array([-1, -1, -1, -1, -1])
 
             pupil_loc = model_pupil.model[:2]
                         
@@ -162,12 +162,13 @@ for dirCond in listDir:
             iriMask = np.zeros_like(I)
             iriMask[rr.clip(0, I.shape[0]-1), cc.clip(0, I.shape[1]-1)] = 1
             
-            if (np.any(pupMask) or np.any(iriMask)) and ((pupil_fit_error<1.5) or (iris_fit_error<1.5)):
+            if (np.any(pupMask) and np.any(iriMask)) and ((pupil_fit_error<0.1) and (iris_fit_error<0.1)):
                 mask_woSkin = 2*iriMask + pupMask # Iris = 2, Pupil = 3
             else:
                 # Neither fit exists, mask should be -1s.
                 print('Found bad mask: {}'.format(imName))
                 mask_woSkin = -np.ones(I.shape)
+                continue
             
             # Add model information
             keydict['archive'].append(ds_name)
@@ -237,5 +238,5 @@ for dirCond in listDir:
 
     # Save data
     dd.io.save(os.path.join(PATH_DS, ds_name+'.h5'), Data)
-    scio.savemat(os.path.join(PATH_MASTER, str(ds_num)), keydict, appendmat=True)
+    scio.savemat(os.path.join(PATH_MASTER, str(ds_name)+'.mat'), keydict, appendmat=True)
     ds_num=ds_num+1

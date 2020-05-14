@@ -23,31 +23,13 @@ if __name__=='__main__':
     path2data = '/media/rakshit/tank/Dataset'
     path2h5 = os.path.join(path2data, 'All')
     path2arc_keys = os.path.join(path2data, 'MasterKey')
-    '''
-    AllDS = readArchives(path2arc_keys)
-    datasets_present, subsets_present = listDatasets(AllDS)
-    print('Datasets present -----')
-    print(datasets_present)
-    print('Subsets present -----')
-    print(subsets_present)
-
-    nv_subs1 = ['nvgaze_female_{:02}_public_50K_{}'.format(i+1, j+1) for i in range(0, 5) for j in range(0, 3)]
-    nv_subs2 = ['nvgaze_male_{:02}_public_50K_{}'.format(i+1, j+1) for i in range(0, 5) for j in range(0, 3)]
-    lpw_subs = ['LPW_{}'.format(i+1) for i in range(0, 12)]
-    subsets = nv_subs1 + nv_subs2 + lpw_subs + ['none', 'train']
-
-    AllDS = selDataset(AllDS, ['OpenEDS', 'UnityEyes', 'NVGaze', 'LPW', 'riteyes_general'])
-    AllDS = selSubset(AllDS, subsets)
-    dataDiv_obj = generate_fileList(AllDS, mode='vanilla', notest=True)
-    trainObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'train', True, (480, 640), 0.5)
-    validObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'valid', False, (480, 640), 0.5)
-    '''
-    f = os.path.join('curObjects', 'cond_0.pkl')
+    # NV, Fuhl, PN, LPW, riteyes_general, OpenEDS
+    f = os.path.join('curObjects', 'baseline', 'cond_pretrained.pkl')
     trainObj, validObj, _ = pickle.load(open(f, 'rb'))
     trainObj.path2data = path2h5
 
     trainLoader = DataLoader(trainObj,
-                             batch_size=16,
+                             batch_size=32,
                              shuffle=True,
                              num_workers=8,
                              drop_last=True)
@@ -55,14 +37,14 @@ if __name__=='__main__':
     totTime = []
     startTime = time.time()
     for bt, data in enumerate(trainLoader):
-        I, mask, spatialWeights, distMap, pupil_center, iris_center, elPts, elNorm, cond, imInfo = data
-        hMaps = points_to_heatmap(elPts, 2, I.shape[2:])
-        dispI = generateImageGrid(I.squeeze().numpy(),
-                                  mask.numpy(),
-                                  hMaps.numpy(),
-                                  elNorm.numpy(),
+        img, labels, spatialWeights, distMap, pupil_center, iris_center, elNorm, cond, imInfo = data
+        dispI = generateImageGrid(img.squeeze().numpy(),
+                                  labels.numpy(),
+                                  elNorm.detach().cpu().numpy().reshape(-1, 2, 5),
                                   pupil_center.numpy(),
-                                  cond.numpy())
+                                  cond.numpy(),
+                                  override=True,
+                                  heatmaps=False)
 
         dT = time.time() - startTime
         totTime.append(dT)

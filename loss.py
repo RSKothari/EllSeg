@@ -140,8 +140,8 @@ def conf_Loss(x, gt, flag):
     return loss
 
 def get_seg2elLoss(opSeg, opEl, loc_seg_ok):
-    # Self correction loss based on regressed ellipse fit. Higher the overlap,
-    # the more negative the loss function will be
+    # Correction loss based on regressed ellipse fit. Higher the overlap,
+    # the smaller the loss
     # opSeg: Segmentation output [B, H, W]
     # opEl: Regressed Ellipse output [B, 5]
     # loc_seg_ok: Samples with existing segmentation
@@ -166,6 +166,40 @@ def get_seg2elLoss(opSeg, opEl, loc_seg_ok):
             loss += (F.binary_cross_entropy(posmask,1-opSeg[i, ...]) + \
                      F.binary_cross_entropy(negmask, opSeg[i, ...]))
     return loss/torch.sum(loc_seg_ok) if torch.sum(loc_seg_ok) else 0.0
+
+def get_selfConsistency(opSeg, opEl, loc_seg_ok):
+    # Correction loss based on self consistency KL divergence.
+    # opSeg: logSoftmax'ed output channel correspond to ellipse in question
+    loss = 0.0
+    
+    opSeg = F.log_softmax(opSeg, dim=1)
+    B, _, H, W = opSeg.shape
+    mesh = create_meshgrid(H, W, normalized_coordinates=True).squeeze().cuda() # 1xHxWx2
+    mesh.requires_grad = False
+    
+    irisEl = opEl[:, :5]
+    pupilEl = opEl[:, 5:]
+    
+    for i in range(0, B):
+        if loc_seg_ok[i]:
+            pupMask = get_mask(mesh, pupilEl[i, :])[1]
+            loss+=torch.mean(F.kl_div(opSeg[i, 2, ...], pupMask, reduction='none'))
+            bgMask = get_mask(mesh, irisEl[i, :])[0]
+            loss+=torch.mean(F.kl_div(opSeg[i, 0, ...], bgMask, reduction='none'))
+    return loss/torch.sum(loc_seg_ok) if torch.sum(loc_seg_ok) else 0.0
+
+def get_mask(mesh, opEl):
+    # posmask: Positive outside the ellipse
+    # negmask: Positive inside the ellipse
+    X =(mesh[..., 0]-opEl[0])*torch.cos(opEl[-1]) +\
+        (mesh[..., 1]-opEl[1])*torch.sin(opEl[-1])
+    Y = -(mesh[..., 0]-opEl[ 0])*torch.sin(opEl[-1]) +\
+        (mesh[..., 1]-opEl[ 1])*torch.cos(opEl[-1])
+    posmask = (X/opEl[ 2])**2 + (Y/opEl[3])**2 - 1
+    negmask = 1 - (X/opEl[ 2])**2 - (Y/opEl[3])**2
+    posmask = soft_heaviside(posmask, sc=64, mode=3)
+    negmask = soft_heaviside(negmask, sc=64, mode=3)
+    return posmask, negmask
 
 class WeightedHausdorffDistance(nn.Module):
     def __init__(self,

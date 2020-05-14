@@ -9,8 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from utils import normPts, regressionModule, linStack, convBlock
-from loss import conf_Loss, get_ptLoss, get_seg2ptLoss, get_segLoss, get_seg2elLoss
-from loss import WeightedHausdorffDistance
+from loss import conf_Loss, get_ptLoss, get_seg2ptLoss, get_segLoss, get_seg2elLoss, get_selfConsistency
 
 def getSizes(chz, growth, blks=4):
     # This function does not calculate the size requirements for head and tail
@@ -174,8 +173,6 @@ class DenseNet2D(nn.Module):
         self.disentangle = disentangle
         self.disentangle_alpha = 2
 
-        self.wHauss = WeightedHausdorffDistance(240, 320, return_2_terms=False)
-
         self.enc = DenseNet_encoder(in_c=1, chz=chz, actfunc=actfunc, growth=growth, norm=norm)
         self.dec = DenseNet_decoder(chz=chz, out_c=3, actfunc=actfunc, growth=growth, norm=norm)
         self.elReg = regressionModule(self.sizes)
@@ -235,6 +232,8 @@ class DenseNet2D(nn.Module):
         loss += loss_seg2el
         
         #%% 
+        if self.selfCorr:
+            loss += 10*get_selfConsistency(op, elPred, 1-cond[:, 1])
         if self.disentangle:
             pred_ds = self.dsIdentify_lin(latent)
             # Disentanglement procedure
