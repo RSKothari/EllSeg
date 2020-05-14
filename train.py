@@ -62,7 +62,7 @@ if __name__ == '__main__':
     os.makedirs(path2checkpoint, exist_ok=True)
     os.makedirs(path2writer, exist_ok=True)
 
-    f = open(os.path.join('curObjects','baseline','cond_'+str(args.curObj)+'.pkl'), 'rb')
+    f = open(os.path.join('curObjects',args.test_cond,'cond_'+str(args.curObj)+'.pkl'), 'rb')
 
     trainObj, validObj, _ = pickle.load(f)
     trainObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
