@@ -10,9 +10,12 @@ spack env activate riteyes4
 model="ritnet_v1"
 declare -a curObj_list=("NVGaze" "PupilNet" "OpenEDS" "Fuhl" "riteyes_general" "LPW")
 declare -a batchsize_list=("48" "48" "48" "48" "48" "48")
-declare -a selfCorr_list=("0" "1")
+declare -a lr_list=("0.001" "0.0005" "0.001" "0.0005" "0.001" "0.0005")
+declare -a selfCorr_list=("0")
+#declare -a selfCorr_list=("0" "1")
 declare -a disentangle_list=("0")
-declare -a tests=("baseline" "random" "leaveoneout")
+declare -a tests=("baseline")
+#declare -a tests=("baseline" "random" "leaveoneout")
 
 for test_mode in "${tests[@]}"
     do

@@ -226,11 +226,6 @@ class DenseNet2D(nn.Module):
         elPred = torch.cat([pred_c_seg[:, 0, :], elOut[:, 2:5],
                             pred_c_seg[:, 1, :], elOut[:, 7:10]], dim=1) # Bx5
         
-        # Segmentation to ellipse loss
-        loss_seg2el = get_seg2elLoss(target==2, elPred[:, 5:], 1-cond[:,1]) +\
-                        get_seg2elLoss(~(target==0), elPred[:, :5], 1-cond[:,1])
-        loss += loss_seg2el
-        
         #%% 
         if self.disentangle:
             pred_ds = self.dsIdentify_lin(latent)
@@ -302,19 +297,13 @@ def get_allLoss(op, # Network output
 
     pred_c_seg = torch.stack([pred_c_seg_iri,
                               pred_c_seg_pup], dim=1) # Iris first policy
+    
     l_seg2pt = 0.5*l_seg2pt_pup + 0.5*l_seg2pt_iri
-
+    
     # Segmentation loss -> backbone loss
     l_seg = get_segLoss(op, target, spatWts, distMap, loc_onlyMask, alpha)
 
-    # Bottleneck ellipse losses
-    # NOTE: This loss is only activated when normalized ellipses do not exist
-    l_pt = get_ptLoss(elOut[:, 5:7], normPts(pupil_center,
-                                             target.shape[1:]), 1-loc_onlyMask)
-    
-    # Compute ellipse losses - F1 loss for valid samples
-    l_ellipse = get_ptLoss(elOut, elNorm.view(-1, 10), loc_onlyMask)
 
-    total_loss = l_seg2pt + 20*l_seg + 10*(l_pt + l_ellipse)
+    total_loss = 20*l_seg + 0.0*l_seg2pt
 
     return (total_loss, pred_c_seg)

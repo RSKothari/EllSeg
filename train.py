@@ -26,6 +26,10 @@ os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE" # Deactive file locking
 embed_log = 5
 EPS=1e-7
 
+torch.manual_seed(0)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
 if __name__ == '__main__':
 
     args = parse_args()
@@ -62,7 +66,7 @@ if __name__ == '__main__':
     os.makedirs(path2checkpoint, exist_ok=True)
     os.makedirs(path2writer, exist_ok=True)
 
-    f = open(os.path.join('curObjects',args.test_cond,'cond_'+str(args.curObj)+'.pkl'), 'rb')
+    f = open(os.path.join('curObjects',args.test_mode,'cond_'+str(args.curObj)+'.pkl'), 'rb')
 
     trainObj, validObj, _ = pickle.load(f)
     trainObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')

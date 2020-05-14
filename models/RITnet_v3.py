@@ -233,7 +233,9 @@ class DenseNet2D(nn.Module):
         
         #%% 
         if self.selfCorr:
+            # Ellipse to segmentation consistency.
             loss += 10*get_selfConsistency(op, elPred, 1-cond[:, 1])
+            
         if self.disentangle:
             pred_ds = self.dsIdentify_lin(latent)
             # Disentanglement procedure
