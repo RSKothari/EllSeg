@@ -29,12 +29,13 @@ def parse_precision(prec):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--curObj', type=str, help='select curriculum to train on', required=True)
-    parser.add_argument('--path2data', type=str, default='/media/rakshit/tank', help='path to dataset')
+    parser.add_argument('--curObj', type=str, default='PupilNet', help='select curriculum to train on')#, required=True)
+#    parser.add_argument('--curObj', type=str, help='select curriculum to train on', required=True)
+    parser.add_argument('--path2data', type=str, default='/media/aaa/hdd/ALL_model/giw_e2e', help='path to dataset')
     parser.add_argument('--epochs', type=int, default=40, help='total number of epochs')
-    parser.add_argument('--model', type=str, default='ritnet_v4', help='select model')
+    parser.add_argument('--model', type=str, default='ritnet_v3', help='select model')
     parser.add_argument('--lr', type=float, default=5e-4, help='learning rate')
-    parser.add_argument('--batchsize', type=int, default=12, help='select a batchsize')
+    parser.add_argument('--batchsize', type=int, default=2, help='select a batchsize')
     parser.add_argument('--resume', type=int, default=0, help='resume?')
     parser.add_argument('--loadfile', type=str, default='', help='load experiment')
     parser.add_argument('--expname', type=str, default='', help='experiment number')
@@ -44,6 +45,7 @@ def parse_args():
     parser.add_argument('--overfit', type=int, default=0, help='overfit to N batches?')
     parser.add_argument('--selfCorr', type=int, default=1, help='self regulation?')
     parser.add_argument('--disentangle', type=int, default=0, help='Explicit dataset bias removal?')
+    parser.add_argument('--seg2elactivated', type=int, default=1, help='select loss setup used for training (only for testing)')
 
     args = parser.parse_args()
     opt = vars(args)

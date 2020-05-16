@@ -13,3 +13,6 @@
 *.vscode
 /TB.lock/
 /rc_log/
+/ExpData/
+/Dataset/
+

@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Created on Wed May 13 17:31:51 2020
+
+@author: aaa
+"""
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
 Created on Fri Feb 28 22:08:51 2020
 
 @author: rakshit
@@ -44,9 +52,12 @@ if __name__=='__main__':
     trainObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'train', True, (480, 640), 0.5)
     validObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'valid', False, (480, 640), 0.5)
     '''
-    f = os.path.join('curObjects','baseline', 'cond_OpenEDS.pkl')
-    trainObj, validObj, _ = pickle.load(open(f, 'rb'))
+    f = os.path.join('curObjects','baseline', 'cond_LPW.pkl')
+    trainObj, validObj, testObj = pickle.load(open(f, 'rb'))
     trainObj.path2data = path2h5
+    testObj.path2data = path2h5
+    validObj.path2data = path2h5
+
 
     trainLoader = DataLoader(trainObj,
                              batch_size=16,
@@ -57,28 +68,34 @@ if __name__=='__main__':
     totTime = []
     startTime = time.time()
     for bt, data in enumerate(trainLoader):
+        print (bt)
 #        I, mask, spatialWeights, distMap, pupil_center, iris_center, elPts, elNorm, cond, imInfo = data
         I, mask, spatialWeights, distMap, pupil_center, iris_center, elNorm, cond, imInfo = data
 #            img, labels, spatialWeights, distMap, pupil_center, iris_center, elNorm, cond, imInfo = batchdata
 #        hMaps = points_to_heatmap(elPts, 2, I.shape[2:])
-        dispI = generateImageGrid(I.squeeze().numpy(),
-                                  mask.numpy(),
-#                                  hMaps.numpy(),
-                                  elNorm.numpy(),
-                                  pupil_center.numpy(),
-                                  cond.numpy())
-
-        dT = time.time() - startTime
-        totTime.append(dT)
-        print('Batch: {}. Time: {}'.format(bt, dT))
-        startTime = time.time()
-
-        if bt == 0:
-            h_ims = axs.imshow(0.5*dispI.permute(1, 2, 0)+0.5, cmap='gray')
-            plt.show(block=False)
-            plt.pause(0.01)
-        else:
-            h_ims.set_data(0.5*dispI.permute(1, 2, 0)+0.5)
-            mypause(0.01)
+#        dispI = generateImageGrid(I.squeeze().numpy(),
+#                                  mask.numpy(),
+##                                  hMaps.numpy(),
+#                                  elNorm.numpy(),
+#                                  pupil_center.numpy(),
+#                                  cond.numpy())
+#
+#        dT = time.time() - startTime
+#        totTime.append(dT)
+#        print('Batch: {}. Time: {}'.format(bt, dT))
+#        startTime = time.time()
+#
+#        if bt == 0:
+#            h_ims = axs.imshow(0.5*dispI.permute(1, 2, 0)+0.5, cmap='gray')
+#            plt.show(block=False)
+#            plt.pause(0.01)
+#        else:
+#            h_ims.set_data(0.5*dispI.permute(1, 2, 0)+0.5)
+#            mypause(0.01)
         
+        for i in range (I.shape[0]):
+            img=Image.fromarray(I[i].numpy())
+            img.save('/media/aaa/hdd/test'+str(int(imInfo[i,0]))+\
+                     '_'+str(int(pupil_center[i][0]))+'_'+str(int(pupil_center[i][1]))+'.png')
+    
     print('Time for 1 epoch: {}'.format(np.sum(totTime)))

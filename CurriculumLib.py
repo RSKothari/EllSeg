@@ -94,6 +94,7 @@ class DataLoader_riteyes(Dataset):
         '''
         numClasses = 3
         img, label, elParam, pupil_center, cond, imInfo = self.readImage(idx)
+        #img1=np.copy(img)
         img, label, pupil_center, elParam = pad2Size(img,
                                                     label,
                                                     elParam,
