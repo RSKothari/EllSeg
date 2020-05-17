@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Created on Sat May  2 13:10:53 2020
+
+@author: aayush
+"""
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
 @author: rakshit
 """
 import torch
@@ -8,8 +16,8 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils import normPts, regressionModule, linStack, convBlock, refineModule
-from loss import conf_Loss, get_ptLoss, get_seg2ptLoss, get_segLoss, get_seg2elLoss
+from utils import normPts, regressionModule, linStack
+from loss import conf_Loss, get_seg2ptLoss, get_segLoss, get_seg2elLoss, get_selfConsistency
 
 def getSizes(chz, growth, blks=4):
     # This function does not calculate the size requirements for head and tail
@@ -17,9 +25,9 @@ def getSizes(chz, growth, blks=4):
     # Encoder sizes
     sizes = {'enc': {'inter':[], 'ip':[], 'op': []},
              'dec': {'skip':[], 'ip': [], 'op': []}}
-    sizes['enc']['inter'] = np.array([chz*(i+1) for i in range(0, blks)])
-    sizes['enc']['op'] = np.array([np.int(growth*chz*(i+1)) for i in range(0, blks)])
-    sizes['enc']['ip'] = np.array([chz] + [np.int(growth*chz*(i+1)) for i in range(0, blks-1)])
+    sizes['enc']['inter'] = np.array([chz for i in range(0, blks)])
+    sizes['enc']['op'] = np.array([chz for i in range(0, blks)])
+    sizes['enc']['ip'] = np.array([chz for i in range(0, blks)])
 
     # Decoder sizes
     sizes['dec']['skip'] = sizes['enc']['ip'][::-1] + sizes['enc']['inter'][::-1]
@@ -27,126 +35,152 @@ def getSizes(chz, growth, blks=4):
     sizes['dec']['op'] = np.append(sizes['enc']['op'][::-1][1:], chz)
     return sizes
 
-class Transition_down(nn.Module):
-    def __init__(self, in_c, out_c, down_size, norm, actfunc):
-        super(Transition_down, self).__init__()
-        self.conv = nn.Conv2d(in_c, out_c, kernel_size=1, padding=0)
-        self.max_pool = nn.AvgPool2d(kernel_size=down_size) if down_size else False
-        self.norm = norm(num_features=in_c)
-        self.actfunc = actfunc
-    def forward(self, x):
-        x = self.actfunc(self.norm(x))
-        x = self.conv(x)
-        x = self.max_pool(x) if self.max_pool else x
-        return x
-
 class DenseNet2D_down_block(nn.Module):
-    def __init__(self, in_c, inter_c, op_c, down_size, norm, actfunc):
+    def __init__(self,input_channels,output_channels,down_size,dropout=False,prob=0):
         super(DenseNet2D_down_block, self).__init__()
-        self.conv1 = nn.Conv2d(in_c, inter_c, kernel_size=3, padding=1)
-        self.conv21 = nn.Conv2d(in_c+inter_c, inter_c, kernel_size=1, padding=0)
-        self.conv22 = nn.Conv2d(inter_c, inter_c, kernel_size=3, padding=1)
-        self.conv31 = nn.Conv2d(in_c+2*inter_c, inter_c, kernel_size=1, padding=0)
-        self.conv32 = nn.Conv2d(inter_c, inter_c, kernel_size=3, padding=1)
-        self.actfunc = actfunc
-        self.bn = norm(num_features=in_c)
-        self.TD = Transition_down(inter_c+in_c, op_c, down_size, norm, actfunc)
+        self.conv1 = nn.Conv2d(input_channels,output_channels,kernel_size=(3,3),padding=(1,1))
+        self.conv21 = nn.Conv2d(input_channels+output_channels,output_channels,kernel_size=(1,1),padding=(0,0))
+        self.conv22 = nn.Conv2d(output_channels,output_channels,kernel_size=(3,3),padding=(1,1))
+        self.conv31 = nn.Conv2d(input_channels+2*output_channels,output_channels,kernel_size=(1,1),padding=(0,0))
+        self.conv32 = nn.Conv2d(output_channels,output_channels,kernel_size=(3,3),padding=(1,1))
+        self.max_pool = nn.AvgPool2d(kernel_size=down_size)
+
+        self.relu = nn.LeakyReLU()
+        self.down_size = down_size
+        self.dropout = dropout
+        self.dropout1 = nn.Dropout(p=prob)
+        self.dropout2 = nn.Dropout(p=prob)
+        self.dropout3 = nn.Dropout(p=prob)
+        self.bn = torch.nn.BatchNorm2d(num_features=output_channels)
 
     def forward(self, x):
-        x1 = self.actfunc(self.conv1(self.bn(x)))
-        x21 = torch.cat([x, x1], dim=1)
-        x22 = self.actfunc(self.conv22(self.conv21(x21)))
-        x31 = torch.cat([x21, x22], dim=1)
-        out = self.actfunc(self.conv32(self.conv31(x31)))
-        out = torch.cat([out, x], dim=1)
-        return out, self.TD(out)
+        if self.down_size != None:
+            x = self.max_pool(x)
+
+        if self.dropout:
+            x1 = self.relu(self.dropout1(self.conv1(x)))
+            x21 = torch.cat((x,x1),dim=1)
+            x22 = self.relu(self.dropout2(self.conv22(self.conv21(x21))))
+            x31 = torch.cat((x21,x22),dim=1)
+            out = self.relu(self.dropout3(self.conv32(self.conv31(x31))))
+        else:
+            x1 = self.relu(self.conv1(x))
+            x21 = torch.cat((x,x1),dim=1)
+            x22 = self.relu(self.conv22(self.conv21(x21)))
+            x31 = torch.cat((x21,x22),dim=1)
+            out = self.relu(self.conv32(self.conv31(x31)))
+        return self.bn(out)
 
 class DenseNet2D_up_block(nn.Module):
-    def __init__(self, skip_c, in_c, out_c, up_stride, actfunc):
+    def __init__(self,skip_channels,input_channels,output_channels,up_stride=2,dropout=False,prob=0):
         super(DenseNet2D_up_block, self).__init__()
-        self.conv11 = nn.Conv2d(skip_c+in_c, out_c, kernel_size=1, padding=0)
-        self.conv12 = nn.Conv2d(out_c, out_c, kernel_size=3, padding=1)
-        self.conv21 = nn.Conv2d(skip_c+in_c+out_c, out_c, kernel_size=1,padding=0)
-        self.conv22 = nn.Conv2d(out_c, out_c, kernel_size=3, padding=1)
-        self.actfunc = actfunc
+        self.conv11 = nn.Conv2d(skip_channels+input_channels,output_channels,kernel_size=(1,1),padding=(0,0))
+        self.conv12 = nn.Conv2d(output_channels,output_channels,kernel_size=(3,3),padding=(1,1))
+        self.conv21 = nn.Conv2d(skip_channels+input_channels+output_channels,output_channels,
+                                kernel_size=(1,1),padding=(0,0))
+        self.conv22 = nn.Conv2d(output_channels,output_channels,kernel_size=(3,3),padding=(1,1))
+        self.relu = nn.LeakyReLU()
         self.up_stride = up_stride
+        self.dropout = dropout
+        self.dropout1 = nn.Dropout(p=prob)
+        self.dropout2 = nn.Dropout(p=prob)
 
-    def forward(self, prev_feature_map, x):
-        x = F.interpolate(x,
-                          mode='bilinear',
-                          align_corners=False,
-                          scale_factor=self.up_stride)
-        x = torch.cat([x, prev_feature_map], dim=1)
-        x1 = self.actfunc(self.conv12(self.conv11(x)))
-        x21 = torch.cat([x, x1],dim=1)
-        out = self.actfunc(self.conv22(self.conv21(x21)))
+    def forward(self,prev_feature_map,x):
+        x = nn.functional.interpolate(x,scale_factor=self.up_stride,mode='nearest')
+        x = torch.cat((x,prev_feature_map),dim=1)
+        if self.dropout:
+            x1 = self.relu(self.dropout1(self.conv12(self.conv11(x))))
+            x21 = torch.cat((x,x1),dim=1)
+            out = self.relu(self.dropout2(self.conv22(self.conv21(x21))))
+        else:
+            x1 = self.relu(self.conv12(self.conv11(x)))
+            x21 = torch.cat((x,x1),dim=1)
+            out = self.relu(self.conv22(self.conv21(x21)))
         return out
 
 class DenseNet_encoder(nn.Module):
-    def __init__(self, in_c=1, chz=32, actfunc=F.leaky_relu, growth=1.5, norm=nn.BatchNorm2d):
+    def __init__(self, in_channels=1,
+                 out_channels=3,
+                 channel_size=32,
+                 actfunc=F.leaky_relu,
+                 norm=nn.BatchNorm2d,
+                 concat=True,
+                 dropout=False,
+                 prob=0):
         super(DenseNet_encoder, self).__init__()
-        sizes = getSizes(chz, growth)
-        interSize = sizes['enc']['inter']
-        opSize = sizes['enc']['op']
-        ipSize = sizes['enc']['ip']
-
-        self.head = convBlock(in_c=1,
-                                inter_c=chz,
-                                out_c=chz,
-                                actfunc=actfunc)
-        self.down_block1 = DenseNet2D_down_block(in_c=ipSize[0],
-                                                 inter_c=interSize[0],
-                                                 op_c=opSize[0],
-                                                 down_size=2,
-                                                 norm=norm,
-                                                 actfunc=actfunc)
-        self.down_block2 = DenseNet2D_down_block(in_c=ipSize[1],
-                                                 inter_c=interSize[1],
-                                                 op_c=opSize[1],
-                                                 down_size=2,
-                                                 norm=norm,
-                                                 actfunc=actfunc)
-        self.down_block3 = DenseNet2D_down_block(in_c=ipSize[2],
-                                                 inter_c=interSize[2],
-                                                 op_c=opSize[2],
-                                                 down_size=2,
-                                                 norm=norm,
-                                                 actfunc=actfunc)
-        self.down_block4 = DenseNet2D_down_block(in_c=ipSize[3],
-                                                 inter_c=interSize[3],
-                                                 op_c=opSize[3],
-                                                 down_size=2,
-                                                 norm=norm,
-                                                 actfunc=actfunc)
-        self.bottleneck = DenseNet2D_down_block(in_c=opSize[3],
-                                                 inter_c=interSize[3],
-                                                 op_c=opSize[3],
-                                                 down_size=0,
-                                                 norm=norm,
-                                                 actfunc=actfunc)
+   
+        self.down_block1 = DenseNet2D_down_block(input_channels=in_channels,
+                                                 output_channels=channel_size,
+                                                 down_size=None,dropout=dropout,
+                                                 prob=prob)
+        self.down_block2 = DenseNet2D_down_block(input_channels=channel_size,
+                                                 output_channels=channel_size,
+                                                 down_size=(2,2),
+                                                 dropout=dropout,
+                                                 prob=prob)
+        self.down_block3 = DenseNet2D_down_block(input_channels=channel_size,
+                                                 output_channels=channel_size,
+                                                 down_size=(2,2),
+                                                 dropout=dropout,
+                                                 prob=prob)
+        self.down_block4 = DenseNet2D_down_block(input_channels=channel_size,
+                                                 output_channels=channel_size,
+                                                 down_size=(2,2),
+                                                 dropout=dropout,prob=prob)
+        self.down_block5 = DenseNet2D_down_block(input_channels=channel_size,
+                                                 output_channels=channel_size,
+                                                 down_size=(2,2),
+                                                 dropout=dropout,
+                                                 prob=prob)
+        
     def forward(self, x):
-        x = self.head(x) # chz
-        skip_1, x = self.down_block1(x) # chz
-        skip_2, x = self.down_block2(x) # 2 chz
-        skip_3, x = self.down_block3(x) # 4 chz
-        skip_4, x = self.down_block4(x) # 8 chz
-        _, x = self.bottleneck(x)
-        return skip_4, skip_3, skip_2, skip_1, x
-
+        self.x1 = self.down_block1(x)
+        self.x2 = self.down_block2(self.x1)
+        self.x3 = self.down_block3(self.x2)
+        self.x4 = self.down_block4(self.x3)
+        self.x5 = self.down_block5(self.x4)
+        return self.x4,self.x3,self.x2,self.x1,self.x5 
+    
 class DenseNet_decoder(nn.Module):
-    def __init__(self, chz, out_c, growth, actfunc=F.leaky_relu, norm=nn.BatchNorm2d):
+    def __init__(self, in_channels=1,
+                 out_channels=3,
+                 channel_size=32,
+                 actfunc=F.leaky_relu,
+                 norm=nn.BatchNorm2d,
+                 concat=True,
+                 dropout=False,
+                 prob=0):
         super(DenseNet_decoder, self).__init__()
-        sizes = getSizes(chz, growth)
-        skipSize = sizes['dec']['skip']
-        opSize = sizes['dec']['op']
-        ipSize = sizes['dec']['ip']
 
-        self.up_block4 = DenseNet2D_up_block(skipSize[0], ipSize[0], opSize[0], 2, actfunc)
-        self.up_block3 = DenseNet2D_up_block(skipSize[1], ipSize[1], opSize[1], 2, actfunc)
-        self.up_block2 = DenseNet2D_up_block(skipSize[2], ipSize[2], opSize[2], 2, actfunc)
-        self.up_block1 = DenseNet2D_up_block(skipSize[3], ipSize[3], opSize[3], 2, actfunc)
+        self.up_block1 = DenseNet2D_up_block(skip_channels=channel_size,
+                                             input_channels=channel_size,
+                                             output_channels=channel_size,
+                                             up_stride=(2,2),
+                                             dropout=dropout,
+                                             prob=prob)
+        self.up_block2 = DenseNet2D_up_block(skip_channels=channel_size,
+                                             input_channels=channel_size,
+                                             output_channels=channel_size,
+                                             up_stride=(2,2),
+                                             dropout=dropout,
+                                             prob=prob)
+        self.up_block3 = DenseNet2D_up_block(skip_channels=channel_size,
+                                             input_channels=channel_size,
+                                             output_channels=channel_size,
+                                             up_stride=(2,2),
+                                             dropout=dropout,
+                                             prob=prob)
+        self.up_block4 = DenseNet2D_up_block(skip_channels=channel_size,
+                                             input_channels=channel_size,
+                                             output_channels=channel_size,
+                                             up_stride=(2,2),
+                                             dropout=dropout,
+                                             prob=prob)
 
-        self.final = convBlock(chz, chz, out_c, actfunc)
+        self.final = nn.Conv2d(in_channels=channel_size,
+                               out_channels=out_channels,
+                               kernel_size=1,
+                               padding=0)        
 
     def forward(self, skip4, skip3, skip2, skip1, x):
          x = self.up_block4(skip4, x)
@@ -161,9 +195,11 @@ class DenseNet2D(nn.Module):
                  chz=32,
                  growth=1.2,
                  actfunc=F.leaky_relu,
-                 norm=nn.InstanceNorm2d,
+                 norm=nn.BatchNorm2d,
                  selfCorr=False,
-                 disentangle=False):
+                 disentangle=False,
+                 dropout=True,
+                 prob=0.2):
         super(DenseNet2D, self).__init__()
 
         self.sizes = getSizes(chz, growth)
@@ -173,15 +209,25 @@ class DenseNet2D(nn.Module):
         self.disentangle = disentangle
         self.disentangle_alpha = 2
 
-        self.enc = DenseNet_encoder(in_c=1, chz=chz, actfunc=actfunc, growth=growth, norm=norm)
-        self.dec = DenseNet_decoder(chz=chz, out_c=3, actfunc=actfunc, growth=growth, norm=norm)
+        self.enc = DenseNet_encoder(in_channels=1, 
+                                    out_channels=3, 
+                                    channel_size=chz,
+                                    actfunc=actfunc, 
+                                    norm=norm,
+                                    concat=True,
+                                    dropout=False,
+                                    prob=0)
+        self.dec = DenseNet_decoder(in_channels=1, 
+                                    out_channels=3, 
+                                    channel_size=chz,
+                                    actfunc=actfunc, 
+                                    norm=norm,
+                                    concat=True,
+                                    dropout=False,
+                                    prob=0)
         self.elReg = regressionModule(self.sizes)
 
         self._initialize_weights()
-        
-    def setEllipseRefine(self, ):
-        print('Generating refinement module ...')
-        self.elRef = refineModule(self.sizes) # First generates an object, then attachs to network
 
 
     def setDatasetInfo(self, numSets=2):
@@ -211,7 +257,8 @@ class DenseNet2D(nn.Module):
         latent = torch.mean(x.flatten(start_dim=2), -1) # [B, features]
         elOut = self.elReg(x, alpha) # Linear regression to ellipse parameters
         op = self.dec(x4, x3, x2, x1, x)
-        
+
+
         #%%
         op_tup = get_allLoss(op, # Output segmentation map
                             elOut, # Predicted Ellipse parameters
@@ -236,10 +283,8 @@ class DenseNet2D(nn.Module):
         loss += loss_seg2el
         
         if self.selfCorr:
-            elPred_ref = self.elRef(elPred, [x4, x3, x2, x1])
-            l_elRef = get_ptLoss(elPred_ref, elNorm.view(-1, 10), 1-cond[:,1])
-            loss += 100*l_elRef
-            
+            loss += 10*get_selfConsistency(op, elPred, 1-cond[:, 1])
+
         if self.disentangle:
             pred_ds = self.dsIdentify_lin(latent)
             # Disentanglement procedure
@@ -251,9 +296,7 @@ class DenseNet2D(nn.Module):
             else:
                 # Secondary loss
                 loss = conf_Loss(pred_ds, ID.to(torch.long), self.toggle)
-
-
-        return op, elPred_ref, latent, loss.unsqueeze(0)
+        return op, elPred, latent, loss.unsqueeze(0)
 
     def _initialize_weights(self):
         for m in self.modules():
@@ -288,7 +331,7 @@ def get_allLoss(op, # Network output
     # Segmentation to pupil center loss using center of mass
     l_seg2pt_pup, pred_c_seg_pup = get_seg2ptLoss(op[:, 2, ...],
                                                   normPts(pupil_center,
-                                                          target.shape[1:]), temperature=16)
+                                                  target.shape[1:]), temperature=4)
     
     # Segmentation to iris center loss using center of mass
     if torch.sum(loc_onlyMask):
@@ -297,7 +340,7 @@ def get_allLoss(op, # Network output
         iriMap = -op[:, 0, ...] # Inverse of background mask
         l_seg2pt_iri, pred_c_seg_iri = get_seg2ptLoss(iriMap,
                                                       elNorm[:, 0, :2],
-                                                      temperature=16)
+                                                      temperature=4)
         temp = torch.stack([loc_onlyMask, loc_onlyMask], dim=1)
         l_seg2pt_iri = torch.sum(l_seg2pt_iri*temp)/torch.sum(temp.to(torch.float32))
         l_seg2pt_pup = torch.mean(l_seg2pt_pup)
@@ -316,15 +359,6 @@ def get_allLoss(op, # Network output
     # Segmentation loss -> backbone loss
     l_seg = get_segLoss(op, target, spatWts, distMap, loc_onlyMask, alpha)
 
-    # Bottleneck ellipse losses
-    # NOTE: This loss is only activated when normalized ellipses do not exist
-    l_pt = get_ptLoss(elOut[:, 5:7], normPts(pupil_center,
-                                             target.shape[1:]), 1-loc_onlyMask)
-    
-    # Compute ellipse losses - F1 loss for valid samples
-    l_ellipse = get_ptLoss(elOut, elNorm.view(-1, 10), loc_onlyMask)
-
-    total_loss = l_ellipse + l_seg2pt + 20*l_seg + 10*l_pt
+    total_loss = 0.0*l_seg2pt + 20*l_seg
 
     return (total_loss, pred_c_seg)
-
