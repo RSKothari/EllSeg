@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from utils import normPts, regressionModule, linStack, convBlock
-from loss import conf_Loss, get_ptLoss, get_seg2ptLoss, get_segLoss, get_seg2elLoss
+from loss import conf_Loss, get_seg2ptLoss, get_segLoss, get_selfConsistency
 
 def getSizes(chz, growth, blks=4):
     # This function does not calculate the size requirements for head and tail
@@ -221,12 +221,15 @@ class DenseNet2D(nn.Module):
                             alpha)
         
         loss, pred_c_seg = op_tup
-
+        
         # Uses ellipse center from segmentation but other params from regression
         elPred = torch.cat([pred_c_seg[:, 0, :], elOut[:, 2:5],
                             pred_c_seg[:, 1, :], elOut[:, 7:10]], dim=1) # Bx5
         
         #%% 
+        if self.selfCorr:
+            loss += 10*get_selfConsistency(op, elPred, 1-cond[:, 1])
+            
         if self.disentangle:
             pred_ds = self.dsIdentify_lin(latent)
             # Disentanglement procedure
