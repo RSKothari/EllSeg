@@ -159,6 +159,19 @@ def getPoint_metric(y_true, y_pred, cond, sz, do_unnorm):
     dist = flag*np.diag(dist)
     return (np.sum(dist)/np.sum(flag) if np.any(flag) else np.nan,
             dist)
+    
+def getPoint_metric_norm(y_true, y_pred, cond, sz, do_norm):
+    # Unnormalize predicted points
+    if do_norm:
+        y_true = normPts(y_true, sz)
+
+    cond = cond.astype(np.bool)
+    flag = (~cond).astype(np.float)
+    dist = metrics.pairwise_distances(y_true, y_pred, metric='euclidean')
+    dist = flag*np.diag(dist)
+    return (np.sum(dist)/np.sum(flag) if np.any(flag) else np.nan,
+            dist)    
+    
 
 def getAng_metric(y_true, y_pred, cond):
     # Assumes the incoming angular measurements are in radians
@@ -620,22 +633,22 @@ class regressionModule(torch.nn.Module):
         self.max_pool = nn.AvgPool2d(kernel_size=2)
 
         self.c1 = nn.Conv2d(in_channels=inChannels,
-                            out_channels=256,
+                            out_channels=128,
                             bias=True,
                             kernel_size=(2,3))
 
-        self.c2 = nn.Conv2d(in_channels=256,
-                            out_channels=256,
+        self.c2 = nn.Conv2d(in_channels=128,
+                            out_channels=128,
                             bias=True,
                             kernel_size=3)
 
-        self.c3 = nn.Conv2d(in_channels=256,
+        self.c3 = nn.Conv2d(in_channels=128,
                             out_channels=32,
                             kernel_size=3,
                             bias=False)
 
-        self.l1 = nn.Linear(32*3*5, 512, bias=True)
-        self.l2 = nn.Linear(512, 10, bias=True)
+        self.l1 = nn.Linear(32*3*5, 256, bias=True)
+        self.l2 = nn.Linear(256, 10, bias=True)
 
         self.c_actfunc = torch.tanh # Center has to be between -1 and 1
         self.param_actfunc = torch.sigmoid # Parameters can't be negative and capped to 1

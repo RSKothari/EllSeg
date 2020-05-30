@@ -25,8 +25,10 @@ from matplotlib.patches import Ellipse
 from helperfunctions import generateEmptyStorage, getValidPoints
 from helperfunctions import ransac, ElliFit, my_ellipse
 
+import warnings
+
 parser = argparse.ArgumentParser()
-parser.add_argument('--noDisp', help='Specify flag to display labelled images', type=int, default=0)
+parser.add_argument('--noDisp', help='Specify flag to display labelled images', type=int, default=1)
 parser.add_argument('--path2ds', help='Path to dataset', type=str)
 args = parser.parse_args()
 
@@ -156,6 +158,7 @@ list_ds = [ele for ele in os.listdir(PATH_DIR) if os.path.isdir(os.path.join(PAT
 list_ds.remove('3d')
 
 for fName in list_ds:
+    warnings.filterwarnings("error")
     PATH_IMAGES = os.path.join(PATH_DIR, fName, 'synthetic')
     PATH_MASK_SKIN = os.path.join(PATH_DIR, fName, 'mask-withskin')
     PATH_MASK_NOSKIN = os.path.join(PATH_DIR, fName, 'mask-withoutskin-noglasses')
@@ -197,7 +200,7 @@ for fName in list_ds:
         pupil_fit_error = my_ellipse(model_pupil.model).verify(pupilPts)
 
         r, c = np.where(maskIm_woskin == 2)
-        pupil_loc = model_pupil.model[:2] if pupil_fit_error < 0.1 else np.stack([np.mean(c), np.mean(r)], axis=0)
+        pupil_loc = model_pupil.model[:2] if pupil_fit_error < 0.05 else np.stack([np.mean(c), np.mean(r)], axis=0)
 
         # Iris ellipse fit
         model_iris = ransac(irisPts, ElliFit, 15, 40, 5e-3, 15).loop()
@@ -266,7 +269,9 @@ for fName in list_ds:
     Data['Fits']['pupil'] = np.stack(Data['Fits']['pupil'], axis=0)
     Data['Fits']['iris'] = np.stack(Data['Fits']['iris'], axis=0)
 
+    warnings.filterwarnings("ignore")
+
     # Save data
     dd.io.save(os.path.join(PATH_DS, str(ds_name)+'.h5'), Data)
-    scio.savemat(os.path.join(PATH_MASTER, str(ds_name)), keydict, appendmat=True)
+    scio.savemat(os.path.join(PATH_MASTER, str(ds_name)+'.mat'), keydict, appendmat=True)
     ds_num=ds_num+1

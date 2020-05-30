@@ -29,7 +29,7 @@ def parse_precision(prec):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--curObj', type=str, default='PupilNet', help='select curriculum to train on')#, required=True)
+    parser.add_argument('--curObj', type=str, default='OpenEDS', help='select curriculum to train on')#, required=True)
 #    parser.add_argument('--curObj', type=str, help='select curriculum to train on', required=True)
     parser.add_argument('--path2data', type=str, default='/media/aaa/hdd/ALL_model/giw_e2e', help='path to dataset')
     parser.add_argument('--epochs', type=int, default=40, help='total number of epochs')
@@ -38,12 +38,13 @@ def parse_args():
     parser.add_argument('--batchsize', type=int, default=2, help='select a batchsize')
     parser.add_argument('--resume', type=int, default=0, help='resume?')
     parser.add_argument('--loadfile', type=str, default='', help='load experiment')
-    parser.add_argument('--expname', type=str, default='', help='experiment number')
+    parser.add_argument('--expname', type=str, default='dev', help='experiment number')
     parser.add_argument('--prec', type=int, default=32, help='precision. 16, 32, 64')
-    parser.add_argument('--disp', type=int, default=1, help='display intermediate ouput')
-    parser.add_argument('--workers', type=int, default=8, help='number of workers')
+    parser.add_argument('--disp', type=int, default=0, help='display intermediate ouput')
+    parser.add_argument('--workers', type=int, default=6, help='number of workers')
     parser.add_argument('--overfit', type=int, default=0, help='overfit to N batches?')
-    parser.add_argument('--selfCorr', type=int, default=1, help='self regulation?')
+    parser.add_argument('--selfCorr', type=int, default=0, help='self regulation?')
+    parser.add_argument('--test_mode', type=str, default='baseline', help='testing strategy?')
     parser.add_argument('--disentangle', type=int, default=0, help='Explicit dataset bias removal?')
     parser.add_argument('--seg2elactivated', type=int, default=1, help='select loss setup used for training (only for testing)')
 

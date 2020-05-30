@@ -16,7 +16,7 @@ from pytorchtools import load_from_file
 from torch.utils.data import DataLoader
 from utils import get_nparams, get_predictions
 from helperfunctions import mypause, stackall_Dict
-from utils import getSeg_metrics, getPoint_metric, generateImageGrid, unnormPts
+from utils import getSeg_metrics, getPoint_metric, generateImageGrid, unnormPts,getPoint_metric_norm
 from utils import getAng_metric,Logger
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
@@ -44,21 +44,22 @@ if __name__ == '__main__':
         exit(1)
 
     if args.seg2elactivated:
-        path_intermediate='with_seg2el'
+        path_intermediate='_0_0'#'with_seg2el'
     else:
-        path_intermediate='without_seg2el'       
+        path_intermediate='_1_0'#'without_seg2el'       
 
-    if args.expname=='':
-        args.expname='RC_e2e_'+args.model+'_'+args.curObj+'_0_0'
+#    if args.expname=='':
+    args.expname='RC_e2e_baseline_'+args.model+'_'+args.curObj+path_intermediate#'_0_0'
+#    args.expname='RC_e2e_leaveoneout_'+args.model+'_'+args.curObj+path_intermediate#'_0_0'
 
-    LOGDIR = os.path.join(os.getcwd(), 'ExpData',path_intermediate, 'logs',\
+    LOGDIR = os.path.join(os.getcwd(), 'ExpData', 'logs_0517',\
                           args.model, args.expname)
 #    LOGDIR = os.path.join(os.getcwd(), 'logs', args.model, args.expname)
 #    path2model = os.path.join(LOGDIR, 'weights')
     path2checkpoint = os.path.join(LOGDIR, 'checkpoints')
 #    path2writer = os.path.join(LOGDIR, 'TB.lock')
-    path2op = os.path.join(os.getcwd(), 'op', str(args.curObj),args.model)
-    path2op_mask = os.path.join(os.getcwd(), 'op', str(args.curObj), args.model,'mask'+path_intermediate)
+    path2op = os.path.join(os.getcwd(), 'op2', str(args.curObj),args.model)
+    path2op_mask = os.path.join(os.getcwd(), 'op2', str(args.curObj), args.model,'mask')
 
 #%%
     os.makedirs(LOGDIR, exist_ok=True)
@@ -88,13 +89,14 @@ if __name__ == '__main__':
     _, _, testObj = pickle.load(f)
     testObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
     testObj.augFlag = False
+#    testObj.imList=np.array([[165,0,0],[197,0,0],[241,0,0],[377,0,0]])
 
     testloader = DataLoader(testObj,
                             batch_size=args.batchsize,
                             shuffle=False,
                             num_workers=args.workers,
                             drop_last=False)
-
+    #%%
 #    if args.disp:
 #        fig, axs = plt.subplots(nrows=1, ncols=1)
     #%%
@@ -107,19 +109,19 @@ if __name__ == '__main__':
 
     if not ((args.curObj== 'LPW') or (args.curObj=='Fuhl') or (args.curObj=='PupilNet')):
         opDict = {'id':[], 'img':[],
-                  'scores':{'iou':[], 'pupil_c_error':[], 'iris_c_error':[]},
+                  'scores':{'iou':[],'iou_sample':[], 'pupil_c_error':[], 'pupil_c_error_un':[],'iris_c_error_un':[],'iris_c_error':[]},
                   'pred':{'pupil_c':[], 'iris_c':[], 'mask':[]},
-                  'gt':{'pupil_c':[],'iris_c':[],  'mask':[]}}        
+                  'gt':{'pupil_c':[],'iris_c':[],  'mask':[]},
+                  'ellipse':{'gt':[],'pred':[]}}        
     else:
         opDict = {'id':[], 'img':[],
-                  'scores':{'pupil_c_error':[]},
+                  'scores':{'pupil_c_error':[],'pupil_c_error_un':[]},
                   'pred':{'pupil_c':[]},
                   'gt':{'pupil_c':[]}}  
       
     with torch.no_grad():
         for bt, batchdata in enumerate(tqdm.tqdm(testloader)):
             img, labels, spatialWeights, distMap, pupil_center, iris_center, elNorm, cond, imInfo = batchdata
-
             out_tup = model(img.to(device).to(args.prec),
                             labels.to(device).long(),
                             pupil_center.to(device).to(args.prec),
@@ -130,7 +132,11 @@ if __name__ == '__main__':
                             imInfo[:, 2].to(device).to(torch.long),
                             0.5)
             output, elOut, _, loss = out_tup
-         
+            
+            if args.model=='deepvog':
+                labels[labels<2]=0
+                labels[labels==2]=1
+        
                     # Predicted centers
             pred_c_iri = elOut[:, 0:2].detach().cpu().numpy()
             pred_c_pup = elOut[:, 5:7].detach().cpu().numpy()
@@ -141,12 +147,25 @@ if __name__ == '__main__':
                                  cond[:, 1].numpy())#[1]
           
             # Center distance
-            ptDist_iri = getPoint_metric(iris_center.numpy(),
+            ptDist_iri_un = getPoint_metric(iris_center.numpy(),
                                          pred_c_iri,
                                          cond[:,1].numpy(),
                                          img.shape[2:],
                                          True)[0] # Unnormalizes the points
-            ptDist_pup = getPoint_metric(pupil_center.numpy(),
+            ptDist_pup_un = getPoint_metric(pupil_center.numpy(),
+                                         pred_c_pup,
+                                         cond[:,0].numpy(),
+                                         img.shape[2:],
+                                         True)[0] # Unnormalizes the points
+
+
+            # Center distance
+            ptDist_iri = getPoint_metric_norm(iris_center.numpy(),
+                                         pred_c_iri,
+                                         cond[:,1].numpy(),
+                                         img.shape[2:],
+                                         True)[0] # Unnormalizes the points
+            ptDist_pup = getPoint_metric_norm(pupil_center.numpy(),
                                          pred_c_pup,
                                          cond[:,0].numpy(),
                                          img.shape[2:],
@@ -158,6 +177,8 @@ if __name__ == '__main__':
             angDist_pup = getAng_metric(elNorm[:, 1, 4].numpy(),
                                         elOut[:, 9].detach().cpu().numpy(),
                                         cond[:, 1].numpy())[0]
+
+#%%
 #            print (img.shape[0],pupil_center, pred_c_pup, ptDist_pup)            
             for i in range(0, img.shape[0]):
 #                archNum = testObj.imList[imCounter, 1]
@@ -166,34 +187,56 @@ if __name__ == '__main__':
                     opDict['gt']['mask'].append(labels[i,...].numpy().astype(np.uint8))               
                     opDict['pred']['iris_c'].append(pred_c_iri[i,...])
                     opDict['gt']['iris_c'].append(iris_center[i,...])
-                    opDict['scores']['iou'].append(iou_sample[i,...])
+                    opDict['scores']['iou_sample'].append(iou_sample[i,...])
+                    opDict['scores']['iou'].append(iou[i,...])
                     opDict['scores']['iris_c_error'].append(ptDist_iri)            
-                    pred_img = predict[i].cpu().numpy()/3.0
-                    label_img = labels[i].cpu().numpy()/3.0
-                    inp = img[i].squeeze() * 0.5 + 0.5
-                    img_orig = np.clip(inp,0,1)
-                    img_orig = np.array(img_orig)
-                    combine = np.hstack([img_orig,label_img,pred_img])
-                    plt.imsave(path2op_mask+'/{}.jpg'.format(testObj.imList[imCounter, 0]),combine)
+                    opDict['scores']['iris_c_error_un'].append(ptDist_iri_un)            
+                    opDict['ellipse']['gt'].append(elNorm[i,...])            
+                    opDict['ellipse']['pred'].append(elOut[i,...])            
+#                    pred_img = predict[i].cpu().numpy()/3.0
+#                    label_img = labels[i].cpu().numpy()/3.0
+#                    inp = img[i].squeeze() * 0.5 + 0.5
+#                    img_orig = np.clip(inp,0,1)
+#                    img_orig = np.array(img_orig)
+#                    combine = np.hstack([img_orig,label_img,pred_img])
+#                    plt.imsave(path2op_mask+'/{}.jpg'.format(testObj.imList[imCounter, 0]),combine)
                     opDict['gt']['pupil_c'].append(pupil_center[i,...])
                     opDict['pred']['pupil_c'].append(pred_c_pup[i,...])
                 opDict['id'].append(testObj.imList[imCounter, 0])
                 opDict['scores']['pupil_c_error'].append(ptDist_pup)                
-                opDict['img'].append(img[i,...].numpy())
+                opDict['scores']['pupil_c_error_un'].append(ptDist_pup_un)                
+#                opDict['img'].append(img[i,...].numpy())
                 imCounter+=1
+
+#            if len(opDict['id'])>6000:
+#                if not ((args.curObj== 'LPW') or (args.curObj=='Fuhl') or (args.curObj=='PupilNet')):
+#                    print('--- Saving output directory ---')
+#                    f = open(os.path.join(path2op,path_intermediate+'opDict_partial.pkl'), 'wb')
+#                    pickle.dump(opDict, f)
+#                    f.close()
+#                    
+#                    f = open(os.path.join(path2op,path_intermediate+'opDict_scores_partial.pkl'), 'wb')
+#                    pickle.dump(opDict['scores'], f)
+#                    f.close()
+#                    
+#                    opDict = {'id':[], 'img':[],
+#                          'scores':{'iou':[],'iou_sample':[], 'pupil_c_error':[], 'pupil_c_error_un':[],'iris_c_error_un':[],'iris_c_error':[]},
+#                          'pred':{'pupil_c':[], 'iris_c':[], 'mask':[]},
+#                          'gt':{'pupil_c':[],'iris_c':[],  'mask':[]},
+#                          'ellipse':{'gt':[],'pred':[]}}        
             
 #%%
         print ('#########################################')
         print ('For paper')
         print (LOGDIR[25:])
-        print ('Length of entires ', len(opDict))
+        print ('Length of entires ', len(opDict['id']))
         print ('#########################################')        
         if not ((args.curObj== 'LPW') or (args.curObj=='Fuhl') or (args.curObj=='PupilNet')):
             print ('Scores (IOU)         '+ '  Mean ' +'     ' +'std')
             print ('Overall mIoU         '+ str(np.round(np.nanmean(np.array(opDict['scores']['iou'])),4))+'     '+ str(np.round(np.nanstd(np.array(opDict['scores']['iou'])),4)))
-            print ('Background class     '+ str(np.round(np.nanmean(np.array(opDict['scores']['iou'])[:,0]),4))+'     '+str(np.round(np.nanstd(np.array(opDict['scores']['iou'])[:,0]),4)))
-            print ('Iris class           '+ str(np.round(np.nanmean(np.array(opDict['scores']['iou'])[:,1]),4))+'     '+str(np.round(np.nanstd(np.array(opDict['scores']['iou'])[:,1]),4)))
-            print ('Pupil class          '+ str(np.round(np.nanmean(np.array(opDict['scores']['iou'])[:,2]),4))+'     '+ str(np.round(np.nanstd(np.array(opDict['scores']['iou'])[:,2]),4)))
+            print ('Background class     '+ str(np.round(np.nanmean(np.array(opDict['scores']['iou_sample'])[:,0]),4))+'     '+str(np.round(np.nanstd(np.array(opDict['scores']['iou_sample'])[:,0]),4)))
+            print ('Iris class           '+ str(np.round(np.nanmean(np.array(opDict['scores']['iou_sample'])[:,1]),4))+'     '+str(np.round(np.nanstd(np.array(opDict['scores']['iou_sample'])[:,1]),4)))
+            print ('Pupil class          '+ str(np.round(np.nanmean(np.array(opDict['scores']['iou_sample'])[:,2]),4))+'     '+ str(np.round(np.nanstd(np.array(opDict['scores']['iou_sample'])[:,2]),4)))
             print ('#########################################')        
             print ('Scores (pixel error) '+ '  Mean ' +'     ' +'std')
             print ('Iris center error     '+ str(np.round(np.nanmean(np.array(opDict['scores']['iris_c_error'])),4))+'     '+str(np.round(np.nanstd(np.array(opDict['scores']['iris_c_error'])),4)))
@@ -206,35 +249,40 @@ if __name__ == '__main__':
         logger.write ('############################################')
         logger.write ('For paper')
         logger.write (LOGDIR[25:])
-        logger.write ('Length of entires {}'.format(len(opDict)))
+        logger.write ('Length of entires ,{}'.format(len(opDict['id'])))
         logger.write ('#########################################')        
         if not ((args.curObj== 'LPW') or (args.curObj=='Fuhl') or (args.curObj=='PupilNet')):               
-            logger.write ('Scores (IOU)         '+ '  Mean ' +'     ' +'std')
-            logger.write ('Overall mIoU         '+ str(np.round(np.nanmean(np.array(opDict['scores']['iou'])),4))+'     '+ str(np.round(np.nanstd(np.array(opDict['scores']['iou'])),4)))
-            logger.write ('Background class     '+ str(np.round(np.nanmean(np.array(opDict['scores']['iou'])[:,0]),4))+'     '+str(np.round(np.nanstd(np.array(opDict['scores']['iou'])[:,0]),4)))
-            logger.write ('Iris class           '+ str(np.round(np.nanmean(np.array(opDict['scores']['iou'])[:,1]),4))+'     '+str(np.round(np.nanstd(np.array(opDict['scores']['iou'])[:,1]),4)))
-            logger.write ('Pupil class          '+ str(np.round(np.nanmean(np.array(opDict['scores']['iou'])[:,2]),4))+'     '+ str(np.round(np.nanstd(np.array(opDict['scores']['iou'])[:,2]),4)))
+            logger.write ('Scores (IOU)        ,'+ '  Mean ' +'    ,' +'std')
+            logger.write ('Overall mIoU        ,'+ str(np.round(np.nanmean(np.array(opDict['scores']['iou'])),4))+'    ,'+ str(np.round(np.nanstd(np.array(opDict['scores']['iou'])),4)))
+            logger.write ('Background class    ,'+ str(np.round(np.nanmean(np.array(opDict['scores']['iou_sample'])[:,0]),4))+'    ,'+str(np.round(np.nanstd(np.array(opDict['scores']['iou_sample'])[:,0]),4)))
+            logger.write ('Iris class          ,'+ str(np.round(np.nanmean(np.array(opDict['scores']['iou_sample'])[:,1]),4))+'    ,'+str(np.round(np.nanstd(np.array(opDict['scores']['iou_sample'])[:,1]),4)))
+            logger.write ('Pupil class         ,'+ str(np.round(np.nanmean(np.array(opDict['scores']['iou_sample'])[:,2]),4))+'    ,'+ str(np.round(np.nanstd(np.array(opDict['scores']['iou_sample'])[:,2]),4)))
             logger.write ('#########################################')        
-            logger.write ('Scores (pixel error) '+ '  Mean ' +'     ' +'std')
-            logger.write ('Iris center error     '+ str(np.round(np.nanmean(np.array(opDict['scores']['iris_c_error'])),4))+'     '+str(np.round(np.nanstd(np.array(opDict['scores']['iris_c_error'])),4)))
+            logger.write ('Scores (pixel error),'+ '  Mean ' +'    ,' +'std')
+            logger.write ('Iris center error    ,'+ str(np.round(np.nanmean(np.array(opDict['scores']['iris_c_error'])),4))+'    ,'+str(np.round(np.nanstd(np.array(opDict['scores']['iris_c_error'])),4)))
         else:
-            logger.write ('Scores (pixel error) '+ '  Mean ' +'     ' +'std')          
-        logger.write ('Pupil center error    '+ str(np.round(np.nanmean(np.array(opDict['scores']['pupil_c_error'])),4))+'     '+ str(np.round(np.nanstd(np.array(opDict['scores']['pupil_c_error'])),4)))
+            logger.write ('Scores (pixel error),'+ '  Mean ' +'    ,' +'std')          
+        logger.write ('Pupil center error   ,'+ str(np.round(np.nanmean(np.array(opDict['scores']['pupil_c_error'])),4))+'    ,'+ str(np.round(np.nanstd(np.array(opDict['scores']['pupil_c_error'])),4)))
         
    #%%     
 
         print('--- Saving output directory ---')
-        f = open(os.path.join(path2op, path_intermediate+'opDict.pkl'), 'wb')
+        f = open(os.path.join(path2op,path_intermediate+'opDict.pkl'), 'wb')
         pickle.dump(opDict, f)
         f.close()
         
-#plt.figure(dpi=150)
-#plt.hist(opDict['scores']['pupil_c_error'],bins=1000)
-#plt.ylabel('Numer of samples')
-#plt.xlabel('Error Quantity')
-#plt.ylim([0,100])
-#plt.axvline(np.nanmean(opDict['scores']['pupil_c_error']),color='r',label='mean')
-#plt.title('LPW dataset')
-#
-#plt.axvline(np.nanmedian(opDict['scores']['pupil_c_error']),color='k',label='median')
-#plt.legend()
+        f = open(os.path.join(path2op,path_intermediate+'opDict_scores.pkl'), 'wb')
+        pickle.dump(opDict['scores'], f)
+        f.close()
+        #%%
+plt.figure(dpi=150)
+plt.hist(opDict['scores']['pupil_c_error'],bins=1000)
+plt.ylabel('Numer of samples')
+plt.xlabel('Error Quantity')
+plt.ylim([0,100])
+plt.axvline(np.nanmean(opDict['scores']['pupil_c_error_un']),color='r',label='mean')
+plt.title( LOGDIR[77:])
+
+plt.axvline(np.nanmedian(opDict['scores']['pupil_c_error_un']),color='k',label='median')
+plt.legend()
+plt.savefig('op/'+LOGDIR[77:]+'.png')

@@ -1,0 +1,213 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Wed May 20 17:58:55 2020
+
+@author: aayush
+"""
+
+import pickle
+import scipy.signal as sig
+import pandas as pd
+import unicodedata
+import matplotlib.pyplot as plt 
+import numpy as np
+import matplotlib.gridspec as gridspec
+import seaborn as sns 
+import pylab
+import cv2
+from helperfunctions import my_ellipse
+from helperfunctions import generateEmptyStorage, getValidPoints
+from helperfunctions import ransac, ElliFit, my_ellipse
+
+H = np.array([[160, 0, 160], [0, 120, 120], [0, 0, 1]])
+
+def generate_bounding_box(mask,el_cord):
+#    mask_post, contours, hierarchy = cv2.findContours(np.uint8(mask), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+#    largest_contour= max(contours, key = cv2.contourArea)
+    im=np.zeros((mask.shape))
+    im2=np.zeros((mask.shape))
+    
+    if not ((el_cord==[-1,-1,-1,-1,-1]) or (el_cord is None)): 
+
+#    rect = cv2.minAreaRect(largest_contour)
+        rect=(int(el_cord[0]),int(el_cord[1])) ,(2*int(el_cord[2]),2*int(el_cord[3])),el_cord[4]*180/3.14
+        print (rect)
+        box = cv2.boxPoints(rect)
+        print (box)
+        box = np.int0(box)
+        im = cv2.drawContours(im,[box],0,1,-1)
+        
+        cv2.ellipse(im2, (int(el_cord[0]),int(el_cord[1])) ,(int(el_cord[2]),int(el_cord[3])),el_cord[4]*180/3.14, 0, 360,1,2)    
+    return im,im2
+
+
+def get_overlap(pred_bbox,gt_bbox):
+    pred_i = pred_bbox == 1
+    label_i = gt_bbox == 1
+    intersection = np.logical_and(label_i, pred_i)
+    union = np.logical_or(label_i, pred_i)
+    iou_score = np.sum(intersection)/np.sum(union)
+    return iou_score
+  
+def get_iris_pupil_model_from_eye_seg(data_to_fit):
+    pupilPts, irisPts = getValidPoints(data_to_fit)
+    # Pupil ellipse fit
+#    print (pupilPts,irisPts)
+    if len (pupilPts)>0:
+        model_pupil = ransac(pupilPts, ElliFit, 15, 40, 5e-3, 15).loop()
+        pupil_fit_error = my_ellipse(model_pupil.model).verify(pupilPts)
+        
+        r, c = np.where(data_to_fit == 2)
+        pupil_model = model_pupil.model #if pupil_fit_error < 0.05 else np.stack([np.mean(c), np.mean(r)], axis=0)
+    else:
+        pupil_model=None
+    # Iris ellipse fit
+    if len (irisPts)>0:
+    
+        model_iris = ransac(irisPts, ElliFit, 15, 40, 5e-3, 15).loop()
+        iris_fit_error = my_ellipse(model_iris.model).verify(irisPts)
+        iris_model=model_iris.model  
+    else:
+        iris_model=None
+    return pupil_model,iris_model
+
+params = {'legend.fontsize': 30,
+          'figure.figsize': (10,5),
+         'axes.labelsize': 30,
+         'axes.titlesize':30,
+         'xtick.labelsize':30,
+         'ytick.labelsize':30}
+pylab.rcParams.update(params)  
+
+dataset_names=['Fuhl','LPW','NVGaze','riteyes_general','OpenEDS','PupilNet']
+dataset_names=['OpenEDS','NVGaze','riteyes_general']
+model_names=['ritnet_v1','ritnet_v2','ritnet_v3']#,'deepvog']
+#model_names=['ritnet_v5']#,'deepvog']
+model_names=['ritnet_v4','ritnet_v5']#,'deepvog']
+
+test_cases=['_0_0','_1_0']
+test_cases=['_0_0']
+#test_cases=['']
+folder_name='giw_e2e' #GIW_e2e_temp, giw_e2e
+
+include_deepvog=True
+#dataset_names=['OpenEDS']
+#model_names=['ritnet_v1']#,'deepvog']
+#test_cases=['_0_0']
+#%%
+for dataset_name in dataset_names:
+
+    
+    save_filename=[]
+    for model_name in model_names:
+        for test_case in test_cases:
+            filename='/media/aaa/hdd/ALL_model/'+folder_name+'/op/'+dataset_name+'/'+\
+                    model_name+'/'+test_case+'opDict.pkl'
+            f = open(filename, 'rb')
+            data=pickle.load(f)
+            f.close()
+            
+            data_iris_el_iou=[]
+            data_pupil_el_iou=[]
+            data_iris_el_angular_error=[]
+            data_pupil_el_angular_error=[]
+            data_gt_ratio_pupil=[]
+            data_pred_ratio_pupil=[]
+            data_gt_ratio_iris=[]
+            data_pred_ratio_iris=[]
+
+            data_gt_pupil=[]
+            data_pred_pupil=[]
+            data_gt_iris=[]
+            data_pred_iris=[]
+
+
+            opDict = {'data_iris_el_iou':[], 'data_pupil_el_iou':[],
+            'data_iris_el_angular_error_after_ratio_test':[], 'data_pupil_el_angular_error_after_ratio_test':[],
+            'data_iris_el_angular_error':[], 'data_pupil_el_angular_error':[]} 
+            
+            for i in range (len(data['gt']['mask'])):
+                pupil_gt=data['gt']['mask'][i]==2
+                iris_gt=data['gt']['mask'][i]==1
+                pupil_pred=data['pred']['mask'][i]==2
+                iris_pred=data['pred']['mask'][i]==1
+
+                el_iris_gt = my_ellipse(data['ellipse']['gt'][i][0]).transform(H)[0]
+                el_pupil_gt = my_ellipse(data['ellipse']['gt'][i][1]).transform(H)[0]
+                if model_name not in ['ritnet_v4','ritnet_v5']:
+                    el_iris_pred = my_ellipse(data['ellipse']['pred'][i][:5].cpu().numpy()).transform(H)[0]
+                    el_pupil_pred = my_ellipse(data['ellipse']['pred'][i][5:].cpu().numpy()).transform(H)[0]
+                else:
+                    el_pupil_pred,el_iris_pred=get_iris_pupil_model_from_eye_seg(data['pred']['mask'][i]+1)
+                  
+                if not ((el_pupil_pred is None) or (el_iris_pred is None) or(el_pupil_gt is None) or (el_iris_gt is None)):
+                    pupil_gt_bbox,pg1=generate_bounding_box(pupil_gt,el_pupil_gt)
+                    pupil_pred_bbox,pp1=generate_bounding_box(pupil_pred,el_pupil_pred)
+                    iris_gt_bbox,ig1=generate_bounding_box(iris_gt,el_iris_gt)
+                    iris_pred_bbox,ip1=generate_bounding_box(iris_pred,el_iris_pred)              
+                    
+                    el_pupil_gt=np.abs(el_pupil_gt)
+                    el_pupil_pred=np.abs(el_pupil_pred)
+                    el_iris_gt=np.abs(el_iris_gt)
+                    el_iris_pred=np.abs(el_iris_pred)                                
+                    
+    #                data_gt_pupil.append(el_pupil_gt)
+    #                data_pred_pupil.append(el_pupil_pred)
+    #                data_gt_iris.append(el_iris_gt)
+    #                data_pred_iris.append(el_iris_pred)
+    
+                    data_gt_pupil.append(el_pupil_gt)
+                    data_pred_pupil.append(el_pupil_pred)
+                    data_gt_iris.append(el_iris_gt)
+                    data_pred_iris.append(el_iris_pred)
+                    
+                    opDict['data_iris_el_angular_error'].append(np.abs((el_iris_gt[4]-el_iris_pred[4])*180/3.14))
+                    opDict['data_pupil_el_angular_error'].append(np.abs((el_pupil_gt[4]-el_pupil_pred[4])*180/3.14))
+                        
+                    if el_iris_gt[3]/el_iris_gt[2]>1.1:
+                        opDict['data_iris_el_angular_error_after_ratio_test'].append(np.abs((el_iris_gt[4]-el_iris_pred[4])*180/3.14))
+                    if el_pupil_gt[3]/el_pupil_gt[2]>1.1:
+                        opDict['data_pupil_el_angular_error_after_ratio_test'].append(np.abs((el_pupil_gt[4]-el_pupil_pred[4])*180/3.14))
+                    opDict['data_iris_el_iou'].append(get_overlap(iris_pred_bbox,iris_gt_bbox))
+                    opDict['data_pupil_el_iou'].append(get_overlap(pupil_pred_bbox,pupil_gt_bbox))
+                    
+                    data_gt_ratio_iris.append(el_iris_gt[3]/el_iris_gt[2])
+                    data_gt_ratio_pupil.append(el_pupil_gt[3]/el_pupil_gt[2])
+                    data_pred_ratio_iris.append(el_iris_pred[3]/el_iris_pred[2])
+                    data_pred_ratio_pupil.append(el_pupil_pred[3]/el_pupil_pred[2])
+                    
+                
+            filename='/media/aaa/hdd/ALL_model/'+folder_name+'/op/'+dataset_name+'/'+\
+                    model_name+'/'+test_case+'el_opDict.pkl'              
+            print('--- Saving output directory ---')
+            f = open(filename, 'wb')
+            pickle.dump(opDict, f)
+            f.close()
+               #%% 
+plt.figure(figsize=(10,7),dpi=150)
+plt.subplot(221)            
+plt.hist(data_pred_ratio_iris,bins=1000,range=(1,2))
+plt.title('predicted iris')
+
+plt.subplot(222)
+plt.hist(data_gt_ratio_iris,bins=1000,range=(1,2))
+plt.title('Ground truth iris')
+
+
+plt.subplot(223)            
+plt.hist(data_pred_ratio_pupil,bins=1000,range=(1,2))
+plt.title('predicted pupil')
+plt.xlabel('Ratio of major/minor axis')
+
+plt.subplot(224)
+plt.hist(data_gt_ratio_pupil,bins=1000,range=(1,2))
+plt.title('ground truth pupil')
+
+plt.tight_layout()
+
+#%%
+
+plt.hist(opDict['data_pupil_el_angular_error'],bins=360)
+
+plt.hist(opDict['data_iris_el_angular_error'],bins=360)

@@ -21,20 +21,20 @@ AllDS = CurLib.readArchives(os.path.join(path2data, 'MasterKey'))
 list_ds = ['NVGaze', 'OpenEDS', 'riteyes_general', 'LPW', 'Fuhl', 'PupilNet']
 
 # Generate objects per dataset
-for train_set in list_ds:
+for setSel in list_ds:
 
     # Train object
-    AllDS_cond = CurLib.selSubset(AllDS, DS_sel['train'][train_set])
-    dataDiv_obj = CurLib.generate_fileList(AllDS_cond, mode='vanilla', notest=False)
+    AllDS_cond = CurLib.selSubset(AllDS, DS_sel['train'][setSel])
+    dataDiv_obj = CurLib.generate_fileList(AllDS_cond, mode='vanilla', notest=True)
     trainObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'train', True, (480, 640), scale=0.5)
     validObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'valid', False, (480, 640), scale=0.5)
 
     # Test object
-    AllDS_cond = CurLib.selSubset(AllDS, DS_sel['test'][train_set])
+    AllDS_cond = CurLib.selSubset(AllDS, DS_sel['test'][setSel])
     dataDiv_obj = CurLib.generate_fileList(AllDS_cond, mode='none', notest=True)
     testObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'test', False, (480, 640), scale=0.5)
 
-    path2save = os.path.join(os.getcwd(), 'baseline', 'cond_'+train_set+'.pkl')
+    path2save = os.path.join(os.getcwd(), 'baseline', 'cond_'+setSel+'.pkl')
     if os.path.exists(path2save) and keepOld:
         print('Preserving old selections ...')
         # This ensure that the original selection remains the same

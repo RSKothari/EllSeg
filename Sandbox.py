@@ -45,11 +45,14 @@ if __name__=='__main__':
     validObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'valid', False, (480, 640), 0.5)
     '''
     f = os.path.join('curObjects','baseline', 'cond_OpenEDS.pkl')
-    trainObj, validObj, _ = pickle.load(open(f, 'rb'))
-    trainObj.path2data = path2h5
+    # NV, Fuhl, PN, LPW, riteyes_general, OpenEDS
 
-    trainLoader = DataLoader(trainObj,
-                             batch_size=16,
+    trainObj, validObj, testObj = pickle.load(open(f, 'rb'))
+    trainObj.path2data = path2h5
+    #%%
+    testObj.imList=np.array([[165,0,0],[197,0,0],[241,0,0],[377,0,0]])
+    trainLoader = DataLoader(testObj,
+                             batch_size=4,
                              shuffle=True,
                              num_workers=8,
                              drop_last=True)
@@ -57,16 +60,15 @@ if __name__=='__main__':
     totTime = []
     startTime = time.time()
     for bt, data in enumerate(trainLoader):
-#        I, mask, spatialWeights, distMap, pupil_center, iris_center, elPts, elNorm, cond, imInfo = data
         I, mask, spatialWeights, distMap, pupil_center, iris_center, elNorm, cond, imInfo = data
-#            img, labels, spatialWeights, distMap, pupil_center, iris_center, elNorm, cond, imInfo = batchdata
-#        hMaps = points_to_heatmap(elPts, 2, I.shape[2:])
         dispI = generateImageGrid(I.squeeze().numpy(),
                                   mask.numpy(),
 #                                  hMaps.numpy(),
                                   elNorm.numpy(),
                                   pupil_center.numpy(),
-                                  cond.numpy())
+                                  cond.numpy(),
+                                  override=True,
+                                  heatmaps=False)
 
         dT = time.time() - startTime
         totTime.append(dT)

@@ -23,8 +23,11 @@ from random import shuffle
 from sklearn.cluster import KMeans
 from matplotlib.patches import Ellipse
 
+import warnings
+warnings.filterwarnings("error")
+
 parser = argparse.ArgumentParser()
-parser.add_argument('--noDisp', help='Specify flag to display labelled images', type=int)
+parser.add_argument('--noDisp', help='Specify flag to display labelled images', type=int, default=1)
 parser.add_argument('--path2ds', help='Path to dataset', type=str)
 args = parser.parse_args()
 
@@ -177,6 +180,7 @@ def quantizeMask(wSkin_mask, I):
     return (wSkin_mask, mask)
 
 for fName in list_ds:
+    warnings.filterwarnings("error")
     ds_name = 'NVGaze'+'_'+fName+'_'+str(ds_num)
 
     # Ignore the first row and column.
@@ -293,6 +297,7 @@ for fName in list_ds:
     Data['Fits']['iris'] = np.stack(Data['Fits']['iris'], axis=0)
 
     # Save data
+    warnings.filterwarnings("ignore")
     dd.io.save(os.path.join(PATH_DS, ds_name+'.h5'), Data)
     scio.savemat(os.path.join(PATH_MASTER, ds_name+'.mat'), keydict, appendmat=True)
     ds_num=ds_num+1

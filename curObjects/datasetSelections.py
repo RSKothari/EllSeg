@@ -60,7 +60,7 @@ DS_test = {'NVGaze':nv_subs_test,
             'PupilNet': PN_subs_test,
             'riteyes_general': riteyes_subs_test}
 
-DS_selections = {'train':DS_train,
+DS_selections = {'train': DS_train,
                  'test' : DS_test}
 
 pkl.dump(DS_selections, open('dataset_selections.pkl', 'wb'))

@@ -9,6 +9,7 @@ Created on Tue Aug  6 14:06:33 2019
 import re
 import os
 import cv2
+import pdb
 import h5py
 import copy
 import torch
@@ -94,7 +95,7 @@ class DataLoader_riteyes(Dataset):
         '''
         numClasses = 3
         img, label, elParam, pupil_center, cond, imInfo = self.readImage(idx)
-        #img1=np.copy(img)
+#        img1=np.copy(img)
         img, label, pupil_center, elParam = pad2Size(img,
                                                     label,
                                                     elParam,
@@ -103,7 +104,7 @@ class DataLoader_riteyes(Dataset):
 
         if self.scale:
             img, label, elParam, pupil_center = self.scaleFn(img, label, elParam, pupil_center)
-
+        img1=np.copy(img)
 
         img, label, pupil_center, elParam = augment(img,
                                                     label,
@@ -117,6 +118,7 @@ class DataLoader_riteyes(Dataset):
         label[label == 1] = 0 # If Sclera exists, move it to background.
         label[label == 2] = 1 # Move Iris to 1
         label[label == 3] = 2 # Move Pupil to 2
+        label1=np.copy(label)
 
         # Compute edge weight maps
         spatialWeights = cv2.Canny(label.astype(np.uint8), 0, 1)/255
@@ -149,6 +151,7 @@ class DataLoader_riteyes(Dataset):
         
         elNorm = torch.from_numpy(elNorm).to(self.prec)
         return (img, label, spatialWeights, distMap, pupil_center, iris_center, elNorm, cond, imInfo)
+#        return (img1, label1, spatialWeights, distMap, pupil_center, iris_center, elNorm, cond, imInfo)
 
     def readImage(self, idx):
         '''
@@ -159,7 +162,6 @@ class DataLoader_riteyes(Dataset):
         archNum = self.imList[idx, 1]
         archStr = self.arch[archNum]
         path2h5 = os.path.join(self.path2data, str(archStr)+'.h5')
-
         f = h5py.File(path2h5, 'r')
         I = f['Images'][im_num, ...]
         pupil_center = f['pupil_loc'][im_num, ...] if f['pupil_loc'].__len__() != 0 else -np.ones(2, )
@@ -169,7 +171,7 @@ class DataLoader_riteyes(Dataset):
         f.close()
 
         cond1 = np.all(pupil_center == -1)
-        cond2 = np.all(mask_noSkin == -1)
+        cond2 = np.all(mask_noSkin == -1) or np.all(mask_noSkin == 0)
         cond3 = np.all(pupil_param == -1)
         cond4 = np.all(iris_param == -1)
         cond = np.array([cond1, cond2, cond3, cond4])

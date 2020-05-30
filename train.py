@@ -26,6 +26,10 @@ os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE" # Deactive file locking
 embed_log = 5
 EPS=1e-7
 
+torch.manual_seed(0)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
 if __name__ == '__main__':
 
     args = parse_args()
@@ -62,7 +66,7 @@ if __name__ == '__main__':
     os.makedirs(path2checkpoint, exist_ok=True)
     os.makedirs(path2writer, exist_ok=True)
 
-    f = open(os.path.join('curObjects','baseline','cond_'+str(args.curObj)+'.pkl'), 'rb')
+    f = open(os.path.join('curObjects',args.test_mode,'cond_'+str(args.curObj)+'.pkl'), 'rb')
 
     trainObj, validObj, _ = pickle.load(f)
     trainObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
@@ -90,7 +94,7 @@ if __name__ == '__main__':
         netDict = load_from_file([checkpointfile, args.loadfile])
         model.load_state_dict(netDict['state_dict'])
         startEp = netDict['epoch'] if 'epoch' in netDict.keys() else 0
-    else:
+    elif 'pretrained' not in args.expname:
         # If the very first epoch, then save out an _init pickle
         # This is particularly useful for lottery tickets
         print('Searching for pretrained weights ...')
@@ -101,6 +105,10 @@ if __name__ == '__main__':
         else:
             print('No pretrained. Warning. Training on only pupil centers leads to instability.')
         startEp = 0
+        torch.save(model.state_dict(), os.path.join(path2model, args.model+'{}.pkl'.format('_init')))
+    else:
+        startEp = 0
+        print('Pretraining mode detected ...')
         torch.save(model.state_dict(), os.path.join(path2model, args.model+'{}.pkl'.format('_init')))
 
     # Let the network know you need a disentanglement module.

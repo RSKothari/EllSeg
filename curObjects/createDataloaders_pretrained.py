@@ -14,7 +14,7 @@ from CurriculumLib import DataLoader_riteyes
 
 path2data = '/media/rakshit/tank/Dataset'
 path2h5 = os.path.join(path2data, 'All')
-keepOld = False
+keepOld = True
 
 DS_sel = pickle.load(open('dataset_selections.pkl', 'rb'))
 AllDS = CurLib.readArchives(os.path.join(path2data, 'MasterKey'))
@@ -30,7 +30,7 @@ for setSel in list_ds:
 
 # Train object
 AllDS_cond = CurLib.selSubset(AllDS, subsets_train)
-dataDiv_obj = CurLib.generate_fileList(AllDS_cond, mode='vanilla', notest=False)
+dataDiv_obj = CurLib.generate_fileList(AllDS_cond, mode='vanilla', notest=True)
 trainObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'train', True, (480, 640), scale=0.5)
 validObj = DataLoader_riteyes(dataDiv_obj, path2h5, 0, 'valid', False, (480, 640), scale=0.5)
 
