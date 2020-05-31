@@ -17,7 +17,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from utils import normPts, regressionModule, linStack
-from loss import conf_Loss, get_seg2ptLoss, get_segLoss, get_seg2elLoss, get_selfConsistency
+from loss import conf_Loss, get_ptLoss, get_seg2ptLoss, get_segLoss, get_seg2elLoss, get_selfConsistency
 
 def getSizes(chz, growth, blks=4):
     # This function does not calculate the size requirements for head and tail
@@ -276,7 +276,7 @@ class DenseNet2D(nn.Module):
         # Uses ellipse center from segmentation but other params from regression
         elPred = torch.cat([pred_c_seg[:, 0, :], elOut[:, 2:5],
                             pred_c_seg[:, 1, :], elOut[:, 7:10]], dim=1) # Bx5
-        
+
         
         if self.selfCorr:
             loss += 10*get_selfConsistency(op, elPred, 1-cond[:, 1])
@@ -348,9 +348,21 @@ def get_allLoss(op, # Network output
         l_seg2pt_pup = torch.mean(l_seg2pt_pup)
         pred_c_seg_iri = torch.clone(elOut[:, 5:7])
 
+    pred_c_seg = torch.stack([pred_c_seg_iri,
+                              pred_c_seg_pup], dim=1) # Iris first policy
+    l_seg2pt = 0.5*l_seg2pt_pup + 0.5*l_seg2pt_iri
+
     # Segmentation loss -> backbone loss
     l_seg = get_segLoss(op, target, spatWts, distMap, loc_onlyMask, alpha)
 
-    total_loss = 0.0*l_seg2pt + 20*l_seg
+    # Bottleneck ellipse losses
+    # NOTE: This loss is only activated when normalized ellipses do not exist
+    l_pt = get_ptLoss(elOut[:, 5:7], normPts(pupil_center,
+                                             target.shape[1:]), 1-loc_onlyMask)
+    
+    # Compute ellipse losses - F1 loss for valid samples
+    l_ellipse = get_ptLoss(elOut, elNorm.view(-1, 10), loc_onlyMask)
+
+    total_loss = l_seg2pt + 20*l_seg + 10*(l_pt + l_ellipse)
 
     return (total_loss, pred_c_seg)
