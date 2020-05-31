@@ -664,7 +664,6 @@ class regressionModule(torch.nn.Module):
                         iri_c,
                         iri_param,
                         iri_angle.unsqueeze(1)], dim=1)
-        #print(op)
         return op
 
 class convBlock(nn.Module):
@@ -679,23 +678,11 @@ class convBlock(nn.Module):
         x = self.actfunc(self.conv2(x)) # Remove x if not working properly
         x = self.bn(x)
         return x
-    
+'''
 class refineModule(nn.Module):
-    def __init__(self, sizes):
+    def __init__(self, N):
         super(refineModule, self).__init__()
-        self.conv1s = nn.ModuleList([nn.Conv2d(in_channels=sizes['dec']['skip'][i]+2,
-                                               out_channels=8,
-                                               kernel_size=1) for i in range(4)])
-
-        # Try shared weights first
-        self.convStack = convBlock(in_c=8*len(sizes['dec']['skip']), inter_c=64, out_c=1, actfunc=F.leaky_relu)
-        self.linStack = linStack(num_layers=2,
-                                 in_dim=560,
-                                 hidden_dim=128,
-                                 out_dim=6,
-                                 bias=True,
-                                 actBool=True,
-                                 dp=0.0)
+        self.c1 = 
         self._initialize_weights()
         
     def _initialize_weights(self):
@@ -778,3 +765,4 @@ class refineModule(nn.Module):
         elPred_refined[:, [2, 3, 4, 7, 8, 9]] += torch.tanh(elCorr) # Between -1 and 1
         # print(F.hardtanh(elCorr))
         return elPred_refined
+'''
