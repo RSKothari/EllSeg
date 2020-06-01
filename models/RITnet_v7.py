@@ -349,8 +349,8 @@ class regressionModule(torch.nn.Module):
         self.bn1 = nn.BatchNorm2d(num_features=inChannels)
         self.bn2 = nn.BatchNorm2d(num_features=64+inChannels)
 
-        self.c_actfunc = torch.tanh # Center has to be between -1 and 1
-        self.param_actfunc = torch.sigmoid # Parameters can't be negative and capped to 1
+        self.c_actfunc = F.hardtanh # Center has to be between -1 and 1
+        self.param_actfunc = F.hardtanh # Parameters can't be negative and capped to 1
 
     def forward(self, x, alpha):
         # x: [B, C, 15, 20]
@@ -364,11 +364,13 @@ class regressionModule(torch.nn.Module):
         x = self.l1(x.reshape(B, 32, -1).sum(dim=-1))
         x = self.l2(x)
 
-        pup_c = self.c_actfunc(x[:, 0:2])
-        pup_param = self.param_actfunc(x[:, 2:4])
+        EPS = 1e-5
+
+        pup_c = self.c_actfunc(x[:, 0:2], min_val=-1+EPS, max_val=1-EPS)
+        pup_param = self.param_actfunc(x[:, 2:4], min_val=0+EPS, max_val=1-EPS)
         pup_angle = x[:, 4]
-        iri_c = self.c_actfunc(x[:, 5:7])
-        iri_param = self.param_actfunc(x[:, 7:9])
+        iri_c = self.c_actfunc(x[:, 5:7], min_val=-1+EPS, max_val=1-EPS)
+        iri_param = self.param_actfunc(x[:, 7:9], min_val=0+EPS, max_val=1-EPS)
         iri_angle = x[:, 9]
 
 
