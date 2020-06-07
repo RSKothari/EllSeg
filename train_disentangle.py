@@ -20,23 +20,19 @@ from utils import getSeg_metrics, getPoint_metric, generateImageGrid, unnormPts
 from utils import getAng_metric
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
-torch.autograd.set_detect_anomaly(True)
 
 #%%
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE" # Deactive file locking
 embed_log = 5
-EPS=1e-7
+EPS=5e-3
+
+torch.manual_seed(0)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
 
 if __name__ == '__main__':
 
     args = parse_args()
-    
-    # Hard code certain conditions for v4 refinement loss
-    args.selfCorr = 1
-    args.batchsize = 42
-    args.workers = 7
-    args.model = 'ritnet_v4'
-    args.expname = args.curObj
 
     device=torch.device("cuda")
     torch.cuda.manual_seed(12)
@@ -58,19 +54,19 @@ if __name__ == '__main__':
     path2model = os.path.join(LOGDIR, 'weights')
     path2checkpoint = os.path.join(LOGDIR, 'checkpoints')
     path2writer = os.path.join(LOGDIR, 'TB.lock')
-    path2trained = os.path.join(os.getcwd(),
-                                'logs',
-                                'ritnet_v3',
-                                args.curObj,
-                                'checkpoints',
-                                'checkpoint.pt')
+    path2pretrained = os.path.join(os.getcwd(),
+                                   'logs',
+                                   args.model,
+                                   'pretrained',
+                                   'weights',
+                                   'pretrained.git_ok')
 
     os.makedirs(LOGDIR, exist_ok=True)
     os.makedirs(path2model, exist_ok=True)
     os.makedirs(path2checkpoint, exist_ok=True)
     os.makedirs(path2writer, exist_ok=True)
 
-    f = open(os.path.join('curObjects','baseline','cond_'+str(args.curObj)+'.pkl'), 'rb')
+    f = open(os.path.join('curObjects',args.test_mode,'cond_'+str(args.curObj)+'.pkl'), 'rb')
 
     trainObj, validObj, _ = pickle.load(f)
     trainObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
@@ -90,29 +86,23 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam([{'params':param_list,
                                    'lr':args.lr}]) # Set optimizer
 
-    # If loading pretrained weights, ensure you don't load confusion branch
-    if args.resume:
-        print ("NOTE resuming training. Priority: 1) Checkpoint 2) Epoch #")
-        model  = model.to(device)
-        checkpointfile = os.path.join(path2checkpoint, 'checkpoint.pt')
-        netDict = load_from_file([checkpointfile, args.loadfile])
-        temp = {name:param for name, param in netDict['state_dict'].items() if 'elRef' not in name}
-        model.load_state_dict(temp)
-        startEp = netDict['epoch'] if 'epoch' in netDict.keys() else 0
+    # Load the final models from baseline checkpoint
+    if args.disentangle:
+        # Note that all models should be loaded from without disentangle condition
+        assert args.test_mode == 'leaveoneout', print('Dientanglement for leave-one-out only')
+        checkpointfile = os.path.join(os.getcwd(),
+                                      'logs',
+                                      args.model,
+                                      'RC_e2e_leaveoneout_{}_{}_0_0'.format(args.model,
+                                                                            args.curObj),
+                                      'checkpoints',
+                                      'checkpoint.pt')
+        netDict = torch.load(checkpointfile)
+        model.load_state_dict(netDict['state_dict'])
+        print('Model loaded from epoch: {}'.format(netDict['epoch']))
     else:
-        # If the very first epoch, then save out an _init pickle
-        # This is particularly useful for lottery tickets
-        print('Searching for pretrained weights ...')
-        if os.path.exists(path2trained):
-            print('Converged model for {} found. Loading ...'.format(args.curObj))
-            netDict = torch.load(path2trained)
-            temp = {name:param for name, param in netDict['state_dict'].items() if 'elRef' not in name}
-            model.load_state_dict(temp)
-            print('Pretrained weights loaded! Enjoy the ride ...')
-        else:
-            print('No pretrained. Warning. Training on only pupil centers leads to instability.')
-        startEp = 0
-        torch.save(model.state_dict(), os.path.join(path2model, args.model+'{}.pkl'.format('_init')))
+        print('Invalid training file.')
+        sys.exit()
 
     # Let the network know you need a disentanglement module.
     # Please refer to args.py for more information on disentanglement strategy
@@ -121,34 +111,23 @@ if __name__ == '__main__':
         print('Total # of datasets found: {}'.format(np.unique(trainObj.imList[:, 2]).size))
         model.setDatasetInfo(np.unique(trainObj.imList[:, 2]).size)
         opt_disent = torch.optim.Adam(model.dsIdentify_lin.parameters(), lr=1*args.lr)
-        
-    if args.selfCorr:
-        # Let the network know you need a ellipse refine module.
-        print('Requesting refinement module ...')
-        model.setEllipseRefine()
-        print('Ellipse refinement module set! Setting optimizer ...')
-        opt_refine = torch.optim.Adam(model.elRef.parameters(),
-                                     lr=10*args.lr)
-        
-        # Set gradient requirement for the rest of the network to False
-        for name, param in model.named_parameters():
-            if 'elRef' in name:
-                param.requires_grad=True
-            else:
-                param.requires_grad=False
+    else:
+        print('Invalid training file.')
+        sys.exit()
 
     nparams = get_nparams(model)
     print('Total number of trainable parameters: {}\n'.format(nparams))
 
-    patience = 30    
+    startEp = 0    
+    patience = 10
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
                                                            'max',
                                                            patience=patience-5,
                                                            verbose=True,
-                                                           factor=0.0005) # Default factor = 0.1
+                                                           factor=0.005) # Default factor = 0.1
 
     early_stopping = EarlyStopping(mode='max',
-                                   delta=0.0000, # Save the smallest of improvements
+                                   delta=0.001,
                                    verbose=True,
                                    patience=patience,
                                    fName='checkpoint.pt',
@@ -190,8 +169,44 @@ if __name__ == '__main__':
         for bt, batchdata in enumerate(trainloader):
             img, labels, spatialWeights, distMap, pupil_center, iris_center, elNorm, cond, imInfo = batchdata
             
+            model.toggle = False
             optimizer.zero_grad()
-            opt_refine.zero_grad()
+
+            # Disentanglement procedure. Toggle should always be False upon entry.
+            if args.disentangle:
+                for name, param in model.named_parameters():
+                    # Freeze unrequired weights
+                    if 'dsIdentify_lin' not in name:
+                        # Freeze all unnecessary weights
+                        param.requires_grad=False
+                    else:
+                        param.requires_grad=True
+
+                val = 100 # Random large value
+                while not model.toggle:
+                    # Keep forward passing until secondary is finetuned
+                    opt_disent.zero_grad()
+                    out_tup = model(img.to(device).to(args.prec),
+                                    labels.to(device).long(),
+                                    pupil_center.to(device).to(args.prec),
+                                    elNorm.to(device).to(args.prec),
+                                    spatialWeights.to(device).to(args.prec),
+                                    distMap.to(device).to(args.prec),
+                                    cond.to(device).to(args.prec),
+                                    imInfo[:, 2].to(device).to(torch.long), # Send DS #
+                                    alpha)
+                    output, elOut, _, loss = out_tup
+                    loss = loss.mean() if args.useMultiGPU else loss
+                    loss.backward()
+                    opt_disent.step()
+
+                    diff = val - loss.detach().item() # Loss derivative
+                    val = loss.detach().item() # Update previous loss value
+                    model.toggle = True if diff < EPS else False
+
+                # Switch the parameters which requires gradients
+                for name, param in model.named_parameters():
+                    param.requires_grad = False if 'dsIdentify_lin' in name else True
 
             model.toggle = True # This must always be true to optimize primary + conf loss
             out_tup = model(img.to(device).to(args.prec),
@@ -218,7 +233,7 @@ if __name__ == '__main__':
             torch.nn.utils.clip_grad_norm_(model.parameters(), 100.0)
             '''
             
-            opt_refine.step() # Update refinement module only
+            optimizer.step()
 
             # Predicted centers
             pred_c_iri = elOut[:, 0:2].detach().cpu().numpy()
@@ -271,18 +286,20 @@ if __name__ == '__main__':
             scoreTrack['pupil']['ang_dist'].append(angDist_pup)
             scoreTrack['pupil']['sc_rat'].append(scale_pup)
 
-            iri_c = unnormPts(pred_c_iri, img.shape[2:])
-            pup_c = unnormPts(pred_c_pup, img.shape[2:])
+            iri_c = unnormPts(pred_c_iri,
+                              img.shape[2:])
+            pup_c = unnormPts(pred_c_pup,
+                              img.shape[2:])
 
             if args.disp:
                 # Generate image grid with overlayed predicted data
                 dispI = generateImageGrid(img.squeeze().numpy(),
-                                          predict.numpy(),
-                                          elOut.detach().cpu().numpy().reshape(-1, 2, 5),
-                                          pup_c,
-                                          cond.numpy(),
-                                          override=True,
-                                          heatmaps=False)
+                          predict.numpy(),
+                          elOut.detach().cpu().numpy().reshape(-1, 2, 5),
+                          pup_c,
+                          cond.numpy(),
+                          override=True,
+                          heatmaps=False)
                 if (epoch == startEp) and (bt == 0):
                     h_im = plt.imshow(dispI.permute(1, 2, 0))
                     plt.pause(0.01)

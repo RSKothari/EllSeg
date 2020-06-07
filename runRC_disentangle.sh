@@ -12,9 +12,9 @@ declare -a model_list=('ritnet_v1' 'ritnet_v2' 'ritnet_v3' 'ritnet_v4' 'ritnet_v
 declare -a curObj_list=("NVGaze" "PupilNet" "OpenEDS" "Fuhl" "riteyes_general" "LPW")
 declare -a batchsize_list=("48" "48" "48" "48" "48" "48")
 declare -a selfCorr_list=("0")
-declare -a disentangle_list=("0")
+declare -a disentangle_list=("1")
 
-declare -a tests=("baseline" "random" "leaveoneout")
+declare -a tests=("leaveoneout")
 
 for model in "${model_list[@]}"
 do

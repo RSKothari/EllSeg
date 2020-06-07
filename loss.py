@@ -132,8 +132,11 @@ def conf_Loss(x, gt, flag):
     if flag:
         B, C = x.shape
         # If true, return the confusion loss
-        loss = F.kl_div(F.log_softmax(x, dim=1),
-                        torch.ones(B, C).cuda()/C)
+        
+        # loss = F.kl_div(F.log_softmax(x, dim=1),
+        #                 torch.ones(B, C).cuda()/C)
+        
+        loss = F.l1_loss(F.softmax(x, dim=1), torch.ones(B, C).cuda()/C)
     else:
         # Else, return the secondary loss
         loss = F.cross_entropy(x, gt)

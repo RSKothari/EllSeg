@@ -5,7 +5,7 @@ epochs=40
 workers=12
 lr=0.0005
 
-# spack env activate riteyes4
+spack env activate riteyes4
 
 disentangle="0"
 curObj="allvsone"
