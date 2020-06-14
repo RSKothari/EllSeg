@@ -124,7 +124,7 @@ if __name__ == '__main__':
                                                            'max',
                                                            patience=patience-5,
                                                            verbose=True,
-                                                           factor=0.005) # Default factor = 0.1
+                                                           factor=0.1) # Default factor = 0.1
 
     early_stopping = EarlyStopping(mode='max',
                                    delta=0.001,
