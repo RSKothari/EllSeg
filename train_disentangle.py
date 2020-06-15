@@ -110,7 +110,7 @@ if __name__ == '__main__':
         # Let the model know how many datasets it must expect
         print('Total # of datasets found: {}'.format(np.unique(trainObj.imList[:, 2]).size))
         model.setDatasetInfo(np.unique(trainObj.imList[:, 2]).size)
-        opt_disent = torch.optim.Adam(model.dsIdentify_lin.parameters(), lr=1*args.lr)
+        opt_disent = torch.optim.Adam(model.dsIdentify_lin.parameters(), lr=10*args.lr)
     else:
         print('Invalid training file.')
         sys.exit()
@@ -183,7 +183,8 @@ if __name__ == '__main__':
                         param.requires_grad=True
 
                 val = 100 # Random large value
-                while not model.toggle:
+                counter = 0
+                while (not model.toggle) or (counter<=10):
                     # Keep forward passing until secondary is finetuned
                     opt_disent.zero_grad()
                     out_tup = model(img.to(device).to(args.prec),
@@ -202,7 +203,9 @@ if __name__ == '__main__':
 
                     diff = val - loss.detach().item() # Loss derivative
                     val = loss.detach().item() # Update previous loss value
-                    model.toggle = True if diff < EPS else False
+                    #print('{}:{}'.format(counter, abs(diff)))
+                    counter+=1
+                    model.toggle = True if abs(diff) < EPS else False
 
                 # Switch the parameters which requires gradients
                 for name, param in model.named_parameters():
