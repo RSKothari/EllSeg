@@ -1,5 +1,7 @@
 # EllSeg: An Ellipse Segmentation Framework for Robust Gaze Tracking
 
+![Promotional image](https://ibb.co/MnY8vbP)
+
 # Abstract
 Ellipse fitting, an essential component in pupil or iris tracking based video oculography, is performed on previously segmented eye parts generated using various computer vision techniques. Several factors, such as occlusions due to eyelid shape, camera position or eyelashes, frequently break ellipse fitting algorithms that rely on well-defined pupil or iris edge segments. In this work, we propose training a convolutional neural network to directly segment entire elliptical structures and demonstrate that such a framework is robust to occlusions and offers superior pupil and iris tracking performance (at least 10% and 24% increase in pupil and iris center detection rate respectively within a two-pixel error margin) compared to using standard eye parts segmentation for multiple publicly available synthetic segmentation datasets.
 
@@ -7,6 +9,7 @@ Ellipse fitting, an essential component in pupil or iris tracking based video oc
 EllSeg is a framework which can easily be replicated on any encoder-decoder architecture. To facilitate our work, we create a custom network nicknamed DenseElNet for which we provide trained models as reported in the [paper](https://arxiv.org/abs/2007.09600).
 
 Trained on:
+
 * OpenEDS
 * NVGaze
 * RITEyes
@@ -19,6 +22,7 @@ To ensure stable training, starred models * were initialized with weights from a
 
 # Try it out on your eye videos!
 For quick inference on your own eye videos, please use `evaluate_ellseg.py` as `python evaluate_ellseg --path_dir=${PATH_EYE_VIDEOS}`. This scripts expects eye videos in the following folder hierarchy (at most two eye videos under one experiment - this follows the PupilLabs format).
+
 * `${path_eye_videos}`
 	* exp_name_0 (can be anything)
 		* eye0.mp4
@@ -42,13 +46,34 @@ Since we do not have access to publish or share other datasets, please download 
 
 ## Special data instructions
 Combine images from `ElSe` and `ExCuSe` datasets into a common directory names `${DATA_DIR}/Datasets/Fuhl`. This combined dataset will henceforth be referred to as `Fuhl`. To ensure we use the latest pupil centers annotations, please use the files marked with `_corrected` and discard their earlier variants. Rename files as such `data set XXI_corrected.txt` to `data set XXI.txt`. Be sure to unzip image data. The expected hierarchy looks something like this:
+
 * `Datasets`
 	* `Fuhl`
 		* `data set XXIII.txt`
 		* `data set XXIII`
 			* `0000000836.png`
 
-Do not unzip the NVGaze dataset, it will consume a lot of wasteful resources and storage space. The code automatically extracts images via zip files. The expected hierarchy looks something like this:
+Do **not** unzip the NVGaze synthetic dataset, it will consume a lot of wasteful resources and storage space. The code automatically extracts images via zip files. The expected hierarchy looks something like this:
+
+## Convert datasets into common format
+Once all datasets are placed in `${DATA_DIR}/Datasets`, please run the `ProcessDatasets.sh`. Please be sure to modify the variable `${DATA_DIR}`. This is a slow process, so please let it run overnight. This
+
+# Code setup
+This repository extracts datasets and converts all of them into a common format with labelled annotations. When a certain type of annotation is not present, you will generally find a `-1` or `NaN` entry. The code setup requires the following steps:
+
+## Creating train and test splits
+To ensure reproducibility, we predefine train and test splits for each dataset. Please refer to the paper for exact split specification. You may choose your own splits by modifying the following file. Please run the following command:
+ `python /curObjects/datasetSelections.py`. 
+
+## Creating train and test objects
+To reproduce our results or for your own experiment, you need to create a train and test object for each dataset. This object contains all information required by the main program to find and process images from a dataset specific H5 file.
+
+`python /curObjects/createDataloaders_baseline.py`
+
+## Launching experiments
+To launch your first experiment, you can edit and launch the following file.
+
+`./runLocal.sh`
 
 # Citations
 If you only use our code base, please cite the following works

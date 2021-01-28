@@ -14,7 +14,10 @@ from helperfunctions import mypause, generateEmptyStorage
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--noDisp', help='Specify flag to display labelled images', type=int, default=1)
-parser.add_argument('--path2ds', help='Path to dataset', type=str)
+parser.add_argument('--path2ds',
+                    help='Path to dataset',
+                    type=str,
+                    default='/media/rakshit/Monster/Datasets')
 args = parser.parse_args()
 if args.noDisp:
     noDisp = True
@@ -36,7 +39,6 @@ for gui in gui_env:
 print("Using: {}".format(matplotlib.get_backend()))
 plt.ion()
 
-args.path2ds = '/media/rakshit/tank/Dataset'
 PATH_DIR = os.path.join(args.path2ds, 'LPW')
 PATH_DS = os.path.join(args.path2ds, 'All')
 PATH_MASTER = os.path.join(args.path2ds, 'MasterKey')
@@ -45,7 +47,6 @@ list_ds = list(os.walk(PATH_DIR))[0][1]
 print('Extracting LPW')
 
 Image_counter = 0.0
-#ds_num = 48
 ds_num = 0
 
 def readFormattedText(path2file, ignoreLines):

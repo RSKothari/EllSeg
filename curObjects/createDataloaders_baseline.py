@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 '''
-
 @author: rakshit
+
+This file generates objects with train and testing split information for each
+dataset. Each dataset has a predefined train and test partition. For more info
+on the partitions, please see the file <datasetSelections.py>
 '''
+
 import os
 import sys
 import pickle
@@ -12,7 +16,7 @@ sys.path.append('..')
 import CurriculumLib as CurLib
 from CurriculumLib import DataLoader_riteyes
 
-path2data = '/media/rakshit/tank/Dataset'
+path2data = '/media/rakshit/Monster/Datasets'
 path2h5 = os.path.join(path2data, 'All')
 keepOld = True
 
@@ -37,6 +41,7 @@ for setSel in list_ds:
     path2save = os.path.join(os.getcwd(), 'baseline', 'cond_'+setSel+'.pkl')
     if os.path.exists(path2save) and keepOld:
         print('Preserving old selections ...')
+
         # This ensure that the original selection remains the same
         trainObj_orig, validObj_orig, testObj_orig = pickle.load(open(path2save, 'rb'))
         trainObj.imList = trainObj_orig.imList

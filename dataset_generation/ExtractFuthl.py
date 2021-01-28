@@ -25,7 +25,10 @@ from helperfunctions import generateEmptyStorage, mypause
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--noDisp', help='Display labelled images', type=int, default=1)
-parser.add_argument('--path2ds', help='Path to dataset', type=str)
+parser.add_argument('--path2ds',
+                    help='Path to dataset',
+                    type=str,
+                    default='/media/rakshit/Monster/Datasets')
 args = parser.parse_args()
 
 if args.noDisp:
@@ -50,7 +53,6 @@ plt.ion()
 
 print('Extracting Fuhl')
 
-args.path2ds = '/media/rakshit/tank/Dataset'
 PATH_DIR = os.path.join(args.path2ds, 'Fuhl')
 PATH_DS = os.path.join(args.path2ds, 'All')
 PATH_MASTER = os.path.join(args.path2ds, 'MasterKey')

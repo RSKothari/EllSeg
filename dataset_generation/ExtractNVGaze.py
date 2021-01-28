@@ -28,7 +28,10 @@ warnings.filterwarnings("error")
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--noDisp', help='Specify flag to display labelled images', type=int, default=1)
-parser.add_argument('--path2ds', help='Path to dataset', type=str)
+parser.add_argument('--path2ds',
+                    help='Path to dataset',
+                    type=str,
+                    default='/media/rakshit/Monster/Datasets')
 args = parser.parse_args()
 
 #sys.path.append(os.getcwd())
@@ -58,14 +61,12 @@ for gui in gui_env:
 print("Using: {}".format(matplotlib.get_backend()))
 
 plt.ion()
-args.path2ds = '/media/rakshit/tank/Dataset'
 PATH_DIR = os.path.join(args.path2ds, 'NVGaze', 'synthetic_dataset')
 PATH_DS = os.path.join(args.path2ds, 'All')
 PATH_MASTER = os.path.join(args.path2ds, 'MasterKey')
 list_ds = [ele for ele in os.listdir(PATH_DIR) if os.path.isdir(os.path.join(PATH_DIR, ele))]
 
 Image_counter = 0.0
-#ds_num = 121
 ds_num = 0
 
 def mypause(interval):

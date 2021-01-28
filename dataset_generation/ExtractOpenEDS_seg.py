@@ -36,7 +36,11 @@ def mypause(interval):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--noDisp', help='Specify flag to display labelled images', type=int, default=1)
-parser.add_argument('--path2ds', help='Path to dataset', type=str)
+parser.add_argument('--path2ds',
+                    help='Path to dataset',
+                    type=str,
+                    default='/media/rakshit/Monster/Datasets')
+
 args = parser.parse_args()
 if args.noDisp:
     noDisp = True
@@ -58,9 +62,7 @@ for gui in gui_env:
 print("Using: {}".format(matplotlib.get_backend()))
 plt.ion()
 
-#ds_num = 161
 ds_num = 0
-args.path2ds = '/media/rakshit/tank/Dataset'
 PATH_OPENEDS = os.path.join(args.path2ds, 'OpenEDS')
 PATH_DIR = os.path.join(args.path2ds, 'OpenEDS', 'Semantic_Segmentation_Dataset')
 PATH_DS = os.path.join(args.path2ds, 'All')
@@ -73,7 +75,7 @@ listDir = os.listdir(PATH_DIR)
 listDir.remove('test')
 for dirCond in listDir:
     ds_name = 'OpenEDS_{}_{}'.format(dirCond, ds_num)
-    
+
     print('Opening the {} folder'.format(dirCond))
 
     # Read UID
@@ -102,7 +104,7 @@ for dirCond in listDir:
             # Load image, label map and fits
             I = cv2.imread(os.path.join(PATH_IMAGES, imName_full), 0)
             LabelMat = np.load(os.path.join(PATH_LABELS, imName+'.npy'))
-            
+
             #%% Make sure images are 640x480
             r = np.where(LabelMat)[0]
             c = int(0.5*(np.max(r) + np.min(r)))
@@ -113,7 +115,7 @@ for dirCond in listDir:
             I = cv2.resize(I, (640, 480), interpolation=cv2.INTER_LANCZOS4)
             LabelMat = cv2.resize(LabelMat, (640, 480), interpolation=cv2.INTER_NEAREST)
             #%%
-            
+
             pupilPts, irisPts = getValidPoints(LabelMat)
             if np.sum(LabelMat == 3) > 150 and type(pupilPts) is not list:
                 model_pupil = ransac(pupilPts, ElliFit, 15, 40, 5e-3, 15).loop()
@@ -145,7 +147,7 @@ for dirCond in listDir:
                 model_iris.model = np.array([-1, -1, -1, -1, -1])
 
             pupil_loc = model_pupil.model[:2]
-                        
+
             # Draw mask no skin
             rr, cc = drawEllipse(pupil_loc[1],
                                  pupil_loc[0],
@@ -161,7 +163,7 @@ for dirCond in listDir:
                                   rotation=-model_iris.model[-1])
             iriMask = np.zeros_like(I)
             iriMask[rr.clip(0, I.shape[0]-1), cc.clip(0, I.shape[1]-1)] = 1
-            
+
             if (np.any(pupMask) and np.any(iriMask)) and ((pupil_fit_error<0.1) and (iris_fit_error<0.1)):
                 mask_woSkin = 2*iriMask + pupMask # Iris = 2, Pupil = 3
             else:
@@ -169,7 +171,7 @@ for dirCond in listDir:
                 print('Found bad mask: {}'.format(imName))
                 mask_woSkin = -np.ones(I.shape)
                 continue
-            
+
             # Add model information
             keydict['archive'].append(ds_name)
             keydict['resolution'].append(I.shape)
@@ -185,10 +187,10 @@ for dirCond in listDir:
             # Append fits
             Data['Fits']['pupil'].append(model_pupil.model)
             Data['Fits']['iris'].append(model_iris.model)
-            
+
             keydict['Fits']['pupil'].append(model_pupil.model)
             keydict['Fits']['iris'].append(model_iris.model)
-            
+
             if not noDisp:
                 if i == 0:
                     cE = Ellipse(tuple(pupil_loc),
@@ -223,7 +225,7 @@ for dirCond in listDir:
                     mypause(0.01)
             i = i + 1
     print('{} images: {}'.format(dirCond, i))
-    
+
     # Stack data
     Data['Images'] = np.stack(Data['Images'], axis=0)
     Data['Masks'] = np.stack(Data['Masks'], axis=0)

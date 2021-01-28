@@ -22,7 +22,11 @@ from helperfunctions import generateEmptyStorage
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--noDisp', help='Specify flag to display labelled images', type=int, default=1)
-parser.add_argument('--path2ds', help='Path to dataset', type=str)
+parser.add_argument('--path2ds',
+                    help='Path to dataset',
+                    type=str,
+                    default='/media/rakshit/Monster/Datasets')
+
 args = parser.parse_args()
 if args.noDisp:
     noDisp = True
@@ -46,7 +50,6 @@ plt.ion()
 
 print('Extracting PupilNet')
 
-args.path2ds = '/media/rakshit/tank/Dataset'
 PATH_DIR = os.path.join(args.path2ds, 'PupilNet')
 PATH_DS = os.path.join(args.path2ds, 'All')
 PATH_MASTER = os.path.join(args.path2ds, 'MasterKey')
@@ -54,7 +57,6 @@ list_ds = ['data set new I', 'data set new II', 'data set new III', 'data set ne
 
 sc = (640.0/384.0)
 Image_counter = 0.0
-#ds_num = 114
 ds_num = 0
 
 def mypause(interval):

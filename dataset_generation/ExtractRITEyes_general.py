@@ -29,7 +29,10 @@ import warnings
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--noDisp', help='Specify flag to display labelled images', type=int, default=1)
-parser.add_argument('--path2ds', help='Path to dataset', type=str)
+parser.add_argument('--path2ds',
+                    help='Path to dataset',
+                    type=str,
+                    default='/media/rakshit/Monster/Datasets')
 args = parser.parse_args()
 
 if args.noDisp:
@@ -54,14 +57,11 @@ for gui in gui_env:
 print("Using: {}".format(matplotlib.get_backend()))
 plt.ion()
 
-args.path2ds = '/media/rakshit/tank/Dataset'
-
 PATH_DIR = os.path.join(args.path2ds, 'RITEyes', 'constraint', 's-general')
 PATH_DS = os.path.join(args.path2ds, 'All')
 PATH_MASTER = os.path.join(args.path2ds, 'MasterKey')
 
 Image_counter = 0.0
-#ds_num = 211
 ds_num = 0
 
 def mypause(interval):
