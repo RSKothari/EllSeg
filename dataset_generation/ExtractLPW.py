@@ -30,6 +30,7 @@ gui_env = ['Qt5Agg','WXAgg','TKAgg','GTKAgg']
 for gui in gui_env:
     try:
         print("testing: {}".format(gui))
+        
         matplotlib.use(gui,warn=False, force=True)
         from matplotlib import pyplot as plt
         break

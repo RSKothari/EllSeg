@@ -36,7 +36,7 @@ if __name__ == '__main__':
 
     device=torch.device("cuda")
     torch.cuda.manual_seed(12)
-    
+
     if torch.cuda.device_count() > 1:
         print('Moving to a multiGPU setup.')
         args.useMultiGPU = True
@@ -50,10 +50,10 @@ if __name__ == '__main__':
         print ("valid models are: {}".format(list(model_dict.keys())))
         exit(1)
 
-    LOGDIR = os.path.join(os.getcwd(), 'logs', args.model, args.expname)
-    path2model = os.path.join(LOGDIR, 'weights')
+    LOGDIR          = os.path.join(os.getcwd(), 'logs', args.model, args.expname)
+    path2model      = os.path.join(LOGDIR, 'weights')
+    path2writer     = os.path.join(LOGDIR, 'TB.lock')
     path2checkpoint = os.path.join(LOGDIR, 'checkpoints')
-    path2writer = os.path.join(LOGDIR, 'TB.lock')
     path2pretrained = os.path.join(os.getcwd(),
                                    'logs',
                                    args.model,
@@ -61,13 +61,16 @@ if __name__ == '__main__':
                                    'weights',
                                    'pretrained.git_ok')
 
+    # Generate directories if they don't exist
     os.makedirs(LOGDIR, exist_ok=True)
     os.makedirs(path2model, exist_ok=True)
     os.makedirs(path2checkpoint, exist_ok=True)
     os.makedirs(path2writer, exist_ok=True)
 
+    # Open relevant train/test object
     f = open(os.path.join('curObjects',args.test_mode,'cond_'+str(args.curObj)+'.pkl'), 'rb')
 
+    # Get splits
     trainObj, validObj, _ = pickle.load(f)
     trainObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
     validObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
@@ -89,15 +92,20 @@ if __name__ == '__main__':
     # If loading pretrained weights, ensure you don't load confusion branch
     if args.resume:
         print ("NOTE resuming training. Priority: 1) Checkpoint 2) Epoch #")
-        model  = model.to(device)
         checkpointfile = os.path.join(path2checkpoint, 'checkpoint.pt')
+
+        model   = model.to(device)
         netDict = load_from_file([checkpointfile, args.loadfile])
+
+        # Load previous checkpoint and resume from that epoch
         model.load_state_dict(netDict['state_dict'])
         startEp = netDict['epoch'] if 'epoch' in netDict.keys() else 0
+
     elif 'pretrained' not in args.expname:
         # If the very first epoch, then save out an _init pickle
         # This is particularly useful for lottery tickets
         print('Searching for pretrained weights ...')
+
         if os.path.exists(path2pretrained):
             netDict = torch.load(path2pretrained)
             model.load_state_dict(netDict['state_dict'])
@@ -122,7 +130,7 @@ if __name__ == '__main__':
     nparams = get_nparams(model)
     print('Total number of trainable parameters: {}\n'.format(nparams))
 
-    patience = 10    
+    patience = 10
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
                                                            'max',
                                                            patience=patience-5,
@@ -140,7 +148,8 @@ if __name__ == '__main__':
     model = model.to(device).to(args.prec) # NOTE: good habit to do this before optimizer
 
     if args.overfit > 0:
-        # This is a flag to check if attempting to overfit
+        # This is a flag to check if attempting to overfit on a small subset
+        # This is used as a quick check to verify training process
         trainObj.imList = trainObj.imList[:args.overfit*args.batchsize,:]
         validObj.imList = validObj.imList[:args.overfit*args.batchsize,:]
 
@@ -171,7 +180,7 @@ if __name__ == '__main__':
 
         for bt, batchdata in enumerate(trainloader):
             img, labels, spatialWeights, distMap, pupil_center, iris_center, elNorm, cond, imInfo = batchdata
-            
+
             model.toggle = False
             optimizer.zero_grad()
 
@@ -225,17 +234,6 @@ if __name__ == '__main__':
 
             loss = loss.mean() if args.useMultiGPU else loss
             loss.backward()
-            
-            ''' GENERALLY NOT NEEDED
-            total_norm = 0.0
-            for p in model.parameters():
-                param_norm = p.grad.data.norm(2)
-                total_norm += param_norm.item() ** 2
-            total_norm = total_norm ** (1. / 2)
-            print('Total norm: {}'.format(total_norm))
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 100.0)
-            '''
-            
             optimizer.step()
 
             # Predicted centers
@@ -316,7 +314,7 @@ if __name__ == '__main__':
                                                                      len(trainloader),
                                                                      loss.item()))
 
-        # Sketch the very last batch. Training has dropped uneven batches..
+        # Sketch the very last batch. Training drops uneven batches..
         dispI = generateImageGrid(img.squeeze().numpy(),
                                   predict.numpy(),
                                   elOut.detach().cpu().numpy().reshape(-1, 2, 5),

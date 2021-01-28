@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "ExtractOpenEDS_seg.py", line 19, in <module>
+    from skimage.draw import ellipse as drawEllipse
+ModuleNotFoundError: No module named 'skimage'

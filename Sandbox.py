@@ -4,6 +4,10 @@
 Created on Fri Feb 28 22:08:51 2020
 
 @author: rakshit
+
+The purpose of this script is to verify if train/test objects are working as
+intended. This function will iterate over H5 files and display groundtruth
+annotations (whichever are present)
 """
 
 import os
@@ -23,21 +27,26 @@ if __name__=='__main__':
     path2data = '/media/rakshit/tank/Dataset'
     path2h5 = os.path.join(path2data, 'All')
     path2arc_keys = os.path.join(path2data, 'MasterKey')
+
     # NV, Fuhl, PN, LPW, riteyes_general, OpenEDS
-    f = os.path.join('curObjects', 'baseline', 'cond_pretrained.pkl')
-    trainObj, validObj, _ = pickle.load(open(f, 'rb'))
+    path_train_test_object = os.path.join('curObjects', 'baseline', 'cond_pretrained.pkl')
+    trainObj, validObj, _ = pickle.load(open(path_train_test_object, 'rb'))
     trainObj.path2data = path2h5
 
+    # Train loader
     trainLoader = DataLoader(trainObj,
                              batch_size=32,
                              shuffle=True,
                              num_workers=8,
                              drop_last=True)
+
     fig, axs = plt.subplots(nrows=1, ncols=1)
     totTime = []
     startTime = time.time()
     for bt, data in enumerate(trainLoader):
         img, labels, spatialWeights, distMap, pupil_center, iris_center, elNorm, cond, imInfo = data
+
+        # Display annotated image
         dispI = generateImageGrid(img.squeeze().numpy(),
                                   labels.numpy(),
                                   elNorm.detach().cpu().numpy().reshape(-1, 2, 5),

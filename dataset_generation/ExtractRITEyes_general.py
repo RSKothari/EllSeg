@@ -57,7 +57,7 @@ for gui in gui_env:
 print("Using: {}".format(matplotlib.get_backend()))
 plt.ion()
 
-PATH_DIR = os.path.join(args.path2ds, 'RITEyes', 'constraint', 's-general')
+PATH_DIR = os.path.join(args.path2ds, 's-general')
 PATH_DS = os.path.join(args.path2ds, 'All')
 PATH_MASTER = os.path.join(args.path2ds, 'MasterKey')
 

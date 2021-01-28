@@ -20,20 +20,25 @@ import scipy.io as scio
 from data_augment import augment
 from torch.utils.data import Dataset
 
-from sklearn.model_selection import StratifiedKFold, train_test_split
 from helperfunctions import simple_string, one_hot2dist, extract_datasets
 from helperfunctions import my_ellipse, pad2Size, get_ellipse_info
 
+from sklearn.model_selection import StratifiedKFold, train_test_split
+
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE" # Deactive file locking
+
 class MaskToTensor(object):
     def __call__(self, img):
         return torch.from_numpy(np.array(img, dtype=np.int32)).long()
 
 class DataLoader_riteyes(Dataset):
     def __init__(self, dataDiv_Obj, path2data, fold_num, cond, augFlag, size, sort='random', scale=False):
+
         cond = 'train_idx' if 'train' in cond else cond
         cond = 'valid_idx' if 'valid' in cond else cond
         cond = 'test_idx' if 'test' in cond else cond
+
+        # Operational variables
         self.scale = scale
         self.augFlag = augFlag
         self.imList = dataDiv_Obj.folds[fold_num][cond]
@@ -49,6 +54,7 @@ class DataLoader_riteyes(Dataset):
         self.imList = np.hstack([self.imList, dsnums[:, np.newaxis]])
 
     def sort(self, sort):
+
         if sort=='ordered':
             # Completely ordered
             loc = np.unique(self.imList,
@@ -56,12 +62,14 @@ class DataLoader_riteyes(Dataset):
                             axis=0)
             print('Warning. Non-unique file list.') if np.any(loc[1]!=1) else print('Sorted list')
             self.imList = loc[0]
+
         elif sort=='semiordered':
             # Randomize first, then sort by archNum
             loc = np.random.permutation(self.imList.shape[0])
             self.imList = self.imList[loc, :]
             loc = np.argsort(self.imList[:, 1])
             self.imList = self.imList[loc, :]
+
         elif sort=='random':
             # Completely random selection. DEFAULT.
             loc = np.random.permutation(self.imList.shape[0])
@@ -130,21 +138,30 @@ class DataLoader_riteyes(Dataset):
         # Convert data to torch primitives
         img = (img - img.mean())/img.std()
         img = torch.from_numpy(img).unsqueeze(0).to(self.prec) # Adds a singleton for channels
+
+        # Groundtruth annotation
         label = MaskToTensor()(label).to(torch.long)
+
+        # Pixels weights based on edges - edge pixels have higher weight
         spatialWeights = torch.from_numpy(spatialWeights).to(self.prec)
+
+        # Distance map for surface loss
         distMap = torch.from_numpy(distMap).to(self.prec)
+
+        # Centers
         pupil_center = torch.from_numpy(pupil_center).to(torch.float32).to(self.prec)
         iris_center = torch.from_numpy(elParam[0][:2]).to(self.prec) if not cond[3] else pupil_center.clone()
+
         cond = torch.from_numpy(cond).to(self.prec).to(torch.bool)
         imInfo = torch.from_numpy(imInfo).to(torch.long)
-        
-        # Generate pupil and iris information
+
+        # Generate normalized pupil and iris information
         H = np.array([[2/img.shape[2], 0, -1], [0, 2/img.shape[1], -1], [0, 0, 1]])
         iris_pts, iris_norm = get_ellipse_info(elParam[0], H, cond[3])
         pupil_pts, pupil_norm = get_ellipse_info(elParam[1], H, cond[2])
 
         elNorm = np.stack([iris_norm, pupil_norm], axis=0) # Respect iris first policy
-        
+
         elNorm = torch.from_numpy(elNorm).to(self.prec)
         return (img, label, spatialWeights, distMap, pupil_center, iris_center, elNorm, cond, imInfo)
 
@@ -153,11 +170,14 @@ class DataLoader_riteyes(Dataset):
         Read an individual image and all its properties using partial loading
         Note: Iris first policy for all data
         '''
-        im_num = self.imList[idx, 0]
+        im_num  = self.imList[idx, 0]
         archNum = self.imList[idx, 1]
         archStr = self.arch[archNum]
+
         path2h5 = os.path.join(self.path2data, str(archStr)+'.h5')
         f = h5py.File(path2h5, 'r')
+
+        # Read information
         I = f['Images'][im_num, ...]
         pupil_center = f['pupil_loc'][im_num, ...] if f['pupil_loc'].__len__() != 0 else -np.ones(2, )
         mask_noSkin = f['Masks_noSkin'][im_num, ...] if f['Masks_noSkin'].__len__() != 0 else -np.ones(I.shape[:2])
@@ -165,6 +185,7 @@ class DataLoader_riteyes(Dataset):
         iris_param = f['Fits']['iris'][im_num, ...] if f['Fits']['iris'].__len__() != 0 else -np.ones(5, )
         f.close()
 
+        # Generate conditions based on available annotations
         cond1 = np.all(pupil_center == -1)
         cond2 = np.all(mask_noSkin == -1) or np.all(mask_noSkin == 0)
         cond3 = np.all(pupil_param == -1)
@@ -180,17 +201,19 @@ def listDatasets(AllDS):
     return (dataset_list, subset_list)
 
 def readArchives(path2arc_keys):
-    # Update: Handles conditions where pupil center is not available
     D = os.listdir(path2arc_keys)
     AllDS = {'archive': [], 'pupil_loc': [], 'dataset': [], 'im_num': [], 'subset': []}
     for chunk in D:
+
         # Load archive key
         chunkData = scio.loadmat(os.path.join(path2arc_keys, chunk))
         N = np.size(chunkData['archive'])
         pupil_loc = chunkData['pupil_loc']
+
         if not chunkData['subset']:
             print('{} does not have subsets.'.format(chunkData['dataset']))
             chunkData['subset'] = 'none'
+
         if type(pupil_loc) is list:
             # Replace pupil locations with -1
             print('{} does not have pupil center locations. Len: {}'.format(
@@ -420,11 +443,12 @@ class Datasplit():
 if __name__=="__main__":
     # This scripts verifies all datasets and returns the total number of images
     # Run sandbox.py to verify dataloader.
-    path2data = '/media/rakshit/tank/Dataset'
-    #path2data = '/run/user/1000/gvfs/smb-share:server=mvrlsmb.cis.rit.edu,share=performlab/Dataset'
+    path2data = '/media/rakshit/Monster/Datasets'
     path2arc_keys = os.path.join(path2data, 'MasterKey')
+
     AllDS = readArchives(path2arc_keys)
     datasets_present, subsets_present = listDatasets(AllDS)
+
     print('Datasets selected ---------')
     print(datasets_present)
     print('Subsets selected ---------')

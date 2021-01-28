@@ -1,6 +1,8 @@
 # EllSeg: An Ellipse Segmentation Framework for Robust Gaze Tracking
 
-[![Promotional image](./figures/promotional_image.jpg)](https://www.youtube.com/watch?v=KOxbO0EI4MA "Audi R8")
+Please click the image to view video
+
+[![Promotional image](./figures/promotional_image.jpg)](https://youtu.be/rRhHXb-R-E8?t=7)
 
 # Abstract
 Ellipse fitting, an essential component in pupil or iris tracking based video oculography, is performed on previously segmented eye parts generated using various computer vision techniques. Several factors, such as occlusions due to eyelid shape, camera position or eyelashes, frequently break ellipse fitting algorithms that rely on well-defined pupil or iris edge segments. In this work, we propose training a convolutional neural network to directly segment entire elliptical structures and demonstrate that such a framework is robust to occlusions and offers superior pupil and iris tracking performance (at least 10% and 24% increase in pupil and iris center detection rate respectively within a two-pixel error margin) compared to using standard eye parts segmentation for multiple publicly available synthetic segmentation datasets.
