@@ -92,6 +92,7 @@ for name in list_ds:
         VidObj = cv2.VideoCapture(Path2vid)
 
         keydict = {k:[] for k in ['pupil_loc', 'archive', 'data_type', 'resolution', 'dataset', 'subset']}
+
         # Generate empty dictionaries
         keydict['data_type'] = 0 # Only pupil center available
         keydict['resolution'] = []
@@ -142,7 +143,8 @@ for name in list_ds:
         keydict['pupil_loc'] = np.stack(keydict['pupil_loc'], axis=0)
         keydict['resolution'] = np.stack(keydict['resolution'], axis=0)
         keydict['archive'] = np.stack(keydict['archive'], axis=0)
-        # Save data
+
+        # Save out data
         dd.io.save(os.path.join(PATH_DS, str(ds_num)+'.h5'), Data)
         scio.savemat(os.path.join(PATH_MASTER, str(ds_num)), keydict, appendmat=True)
         ds_num=ds_num+1

@@ -8,6 +8,7 @@ Created on Wed May 29 16:16:57 2019
 This code extracts the following datasets:
 else, excuse - Wolfgang Fuhl
 """
+
 import os
 import cv2
 import sys
@@ -74,6 +75,7 @@ for name in list_ds:
     # Ignore the first row and column.
     # Columns: [index, p_x, p_y]
 
+    # Read pupil data from the published dataset
     PupilData = np.genfromtxt(os.path.join(PATH_DIR, name+'.txt'), delimiter=' ')[1:,1:]
 
     listFiles = glob.glob(os.path.join(PATH_DIR, name, '*.png'))
@@ -82,6 +84,7 @@ for name in list_ds:
     imNames, _ = list(zip(*imNames))
     imNames = np.array(list(map(int, imNames)))
 
+    # Generate an empty data container
     Data, keydict = generateEmptyStorage(name='Fuhl', subset=name)
 
     ds_name = keydict['dataset'] + '_' + keydict['subset'] + '_' + str(ds_num)
@@ -90,8 +93,11 @@ for name in list_ds:
         fig, plts = plt.subplots(1,1)
     for i in range(0, PupilData.shape[0]):
         iNum = PupilData[i, 0]
+
+        # Assert unique image names
         loc = imNames == iNum
         assert sum(loc) == 1, "Error. Only one file should have that number"
+
         loc = np.where(loc)[0]
         path2im = listFiles[int(loc)]
         imStr = os.path.split(path2im)[1]
@@ -102,16 +108,16 @@ for name in list_ds:
 
         pupil_loc = copy.deepcopy(PupilData[i, 1:]*sc)
         pupil_loc = fix_pupil_loc(pupil_loc, I.shape) # Fix pupil position
-        
+
         Data['Images'].append(I)
         Data['pupil_loc'].append(pupil_loc) # Fix in records too
         Data['Info'].append(imStr)
-        
+
         keydict['Info'].append(imStr)
         keydict['resolution'].append(I.shape)
         keydict['archive'].append(ds_name)
         keydict['pupil_loc'].append(pupil_loc) # Fix in records too
-        
+
         Image_counter = Image_counter + 1
         if not noDisp:
             if i == 0:
