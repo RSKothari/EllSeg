@@ -41,10 +41,11 @@ def parse_args():
     parser.add_argument('--expname', type=str, default='dev', help='experiment number')
     parser.add_argument('--selfCorr', type=int, default=0, help='self regulation?')
     parser.add_argument('--loadfile', type=str, default='', help='load experiment')
-    parser.add_argument('--path2data', type=str, default='/media/rakshit/tank', help='path to dataset')
+    parser.add_argument('--path2data', type=str, default='/media/rakshit/Monster', help='path to dataset')
     parser.add_argument('--batchsize', type=int, default=12, help='select a batchsize')
     parser.add_argument('--test_mode', type=str, default='leaveoneout', help='testing strategy?')
     parser.add_argument('--disentangle', type=int, default=1, help='Explicit dataset bias removal?')
+    parser.add_argument('--test_save_op_masks', type=int, default=0, help='save predicted output masks')
 
     args = parser.parse_args()
     opt = vars(args)

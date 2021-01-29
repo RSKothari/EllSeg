@@ -48,6 +48,7 @@ Since we do not have access to publish or share other datasets, please download 
 6. [OpenEDS](https://research.fb.com/programs/openeds-challenge)
 
 ## Special data instructions
+
 Combine images from `ElSe` and `ExCuSe` datasets into a common directory names `${DATA_DIR}/Datasets/Fuhl`. This combined dataset will henceforth be referred to as `Fuhl`. To ensure we use the latest pupil centers annotations, please use the files marked with `_corrected` and discard their earlier variants. Rename files as such `data set XXI_corrected.txt` to `data set XXI.txt`. Be sure to unzip image data. The expected hierarchy looks something like this:
 
 * `Datasets`
@@ -59,26 +60,42 @@ Combine images from `ElSe` and `ExCuSe` datasets into a common directory names `
 Do **not** unzip the NVGaze synthetic dataset, it will consume a lot of wasteful resources and storage space. The code automatically extracts images via zip files. The expected hierarchy looks something like this:
 
 ## Convert datasets into common format
+
 Once all datasets are placed in `${DATA_DIR}/Datasets`, please run the `ProcessDatasets.sh`. Please be sure to modify the variable `${DATA_DIR}`. This is a slow process, so please let it run overnight. This
 
 # Code setup
+
 This repository extracts datasets and converts all of them into a common format with labelled annotations. When a certain type of annotation is not present, you will generally find a `-1` or `NaN` entry. The code setup requires the following steps:
 
 ## Creating train and test splits
+
 To ensure reproducibility, we predefine train and test splits for each dataset. Please refer to the paper for exact split specification. You may choose your own splits by modifying the following file. Please run the following command:
  `python /curObjects/datasetSelections.py`. 
 
 ## Creating train and test objects
+
 To reproduce our results or for your own experiment, you need to create a train and test object for each dataset. This object contains all information required by the main program to find and process images from a dataset specific H5 file.
 
 `python /curObjects/createDataloaders_baseline.py`
 
 ## Launching experiments
+
 To launch your first experiment, you can edit and launch the following file. Please sure to change the train set as per your requirements. The code by default expects the train and test objects to be present in `./curObjects/baseline`
 
 `./runLocal.sh`
 
+## Testing a checkpoint model
+
+Models which demonstrate best performance on a validation metric which combines segmentation, pupil and iris centers (see our paper for details) are saved out as `checkpoint.pt` files. Each checkpoint can be loaded by giving the appropriate paths to the testing script, `test.py`
+
+`python test.py --expname=OpenEDS --model=ritnet_v3 --path2data=${DATA_DIR} --curObj=OpenEDS --loadfile=${PATH_TO_CHECKPOINT}/checkpoint.pt --disp=0`
+
+You may alternatively switch the display flag on to visualize the output of EllSeg, similar to the following:
+
+![EllSeg_OpenEDS](./figures/ellseg_openeds_op.gif)
+
 # Citations
+
 If you only use our code base, please cite the following works
 EllSeg 
 ```
@@ -102,5 +119,5 @@ RITEyes
 Please cite and credit individual datasets at their own respective links.
 
 # Questions?
-Please email Rakshit Kothari at rsk3900@rit.edu
 
+Please email Rakshit Kothari at rsk3900@rit.edu

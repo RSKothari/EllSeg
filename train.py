@@ -72,8 +72,8 @@ if __name__ == '__main__':
 
     # Get splits
     trainObj, validObj, _ = pickle.load(f)
-    trainObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
-    validObj.path2data = os.path.join(args.path2data, 'Dataset', 'All')
+    trainObj.path2data = os.path.join(args.path2data, 'Datasets', 'All')
+    validObj.path2data = os.path.join(args.path2data, 'Datasets', 'All')
     trainObj.augFlag = True
     validObj.augFlag = False
 

@@ -1,0 +1,10 @@
+
+Bad key "text.kerning_factor" on line 4 in
+/home/rakshit/miniconda3/envs/EllSeg/lib/python3.6/site-packages/matplotlib/mpl-data/stylelib/_classic_test_patch.mplstyle.
+You probably need to get an updated matplotlibrc file from
+http://github.com/matplotlib/matplotlib/blob/master/matplotlibrc.template
+or from the matplotlib source distribution
+No graphics
+testing: Qt5Agg
+Using: Qt5Agg
+Extracting PupilNet

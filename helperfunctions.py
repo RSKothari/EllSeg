@@ -462,11 +462,13 @@ def getValidPoints(LabelMat):
 
 def stackall_Dict(D):
     for key, value in D.items():
-        if type(D[key]) is list:
-            print('Stacking: {}'.format(key))
-            D[key] = np.stack(value, axis=0)
-        elif type(D[key]) is dict:
-            stackall_Dict(D[key])
+        if value:
+            # Ensure it is not empty
+            if type(D[key]) is list:
+                print('Stacking: {}'.format(key))
+                D[key] = np.stack(value, axis=0)
+            elif type(D[key]) is dict:
+                stackall_Dict(D[key])
     return D
 
 def extract_datasets(subsets):

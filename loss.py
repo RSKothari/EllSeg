@@ -14,16 +14,20 @@ from sklearn.utils.extmath import cartesian
 from utils import create_meshgrid, soft_heaviside, _assert_no_grad, cdist, generaliz_mean
 
 def get_seg2ptLoss(op, gtPts, temperature=1):
-    # Custom function to find the pupilary center of mass to detected pupil
+    # Custom function to find the center of mass to get detected pupil or iris
     # center
-    # op: BXHXW - single channel corresponding to pupil
+    # op: BXHXW - single channel corresponding to pupil or iris predictions
     B, H, W = op.shape
     wtMap = F.softmax(op.view(B, -1)*temperature, dim=1) # [B, HXW]
 
     XYgrid = create_meshgrid(H, W, normalized_coordinates=True) # 1xHxWx2
 
-    xloc = XYgrid[0, :, :, 0].reshape(-1).cuda()
-    yloc = XYgrid[0, :, :, 1].reshape(-1).cuda()
+    if str(op.device) == 'cpu':
+        xloc = XYgrid[0, :, :, 0].reshape(-1)
+        yloc = XYgrid[0, :, :, 1].reshape(-1)
+    else:
+        xloc = XYgrid[0, :, :, 0].reshape(-1).cuda()
+        yloc = XYgrid[0, :, :, 1].reshape(-1).cuda()
 
     xpos = torch.sum(wtMap*xloc, -1, keepdim=True)
     ypos = torch.sum(wtMap*yloc, -1, keepdim=True)
@@ -132,10 +136,10 @@ def conf_Loss(x, gt, flag):
     if flag:
         B, C = x.shape
         # If true, return the confusion loss
-        
+
         # loss = F.kl_div(F.log_softmax(x, dim=1),
         #                 torch.ones(B, C).cuda()/C)
-        
+
         loss = F.l1_loss(F.softmax(x, dim=1), torch.ones(B, C).cuda()/C)
     else:
         # Else, return the secondary loss
@@ -174,15 +178,15 @@ def get_selfConsistency(opSeg, opEl, loc_seg_ok):
     # Correction loss based on self consistency KL divergence.
     # opSeg: logSoftmax'ed output channel correspond to ellipse in question
     loss = 0.0
-    
+
     opSeg = F.log_softmax(opSeg, dim=1)
     B, _, H, W = opSeg.shape
     mesh = create_meshgrid(H, W, normalized_coordinates=True).squeeze().cuda() # 1xHxWx2
     mesh.requires_grad = False
-    
+
     irisEl = opEl[:, :5]
     pupilEl = opEl[:, 5:]
-    
+
     for i in range(0, B):
         if loc_seg_ok[i]:
             pupMask = get_mask(mesh, pupilEl[i, :])[1]
