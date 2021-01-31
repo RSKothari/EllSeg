@@ -40,7 +40,7 @@ def parse_args():
     parser.add_argument('--overfit', type=int, default=0, help='overfit to N batches?')
     parser.add_argument('--expname', type=str, default='dev', help='experiment number')
     parser.add_argument('--selfCorr', type=int, default=0, help='self regulation?')
-    parser.add_argument('--loadfile', type=str, default='', help='load experiment')
+    parser.add_argument('--loadfile', type=str, default='./weights/all.git_ok', help='load experiment')
     parser.add_argument('--path2data', type=str, default='/media/rakshit/Monster', help='path to dataset')
     parser.add_argument('--batchsize', type=int, default=12, help='select a batchsize')
     parser.add_argument('--test_mode', type=str, default='leaveoneout', help='testing strategy?')

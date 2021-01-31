@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import cv2
 
 from itertools import chain
+from skimage import draw
 from scipy.ndimage import distance_transform_edt as distance
 
 EPS = 1e-40
@@ -511,8 +512,51 @@ def get_ellipse_info(param, H, cond):
         elPts = -np.ones((8, 2))
     return elPts, norm_param
 
-# Data extraction helpers
+# Plot segmentation output, pupil and iris ellipses
+def plot_segmap_ellpreds(image, seg_map, pupil_ellipse, iris_ellipse):
+    loc_iris = seg_map == 1
+    loc_pupil = seg_map == 2
 
+    out_image = np.stack([image]*3, axis=2)
+
+    loc_image_non_sat = image < (255-100)
+
+    # Add green to iris
+    out_image[..., 1] = out_image[..., 1] + 100*loc_iris*loc_image_non_sat
+
+    # Add yellow to pupil
+
+    out_image[..., 0] = out_image[..., 0] + 100*loc_pupil*loc_image_non_sat
+    out_image[..., 1] = out_image[..., 1] + 100*loc_pupil*loc_image_non_sat
+
+    # Sketch iris ellipse
+    [rr_i, cc_i] = draw.ellipse_perimeter(int(iris_ellipse[1]),
+                                          int(iris_ellipse[0]),
+                                          int(iris_ellipse[3]),
+                                          int(iris_ellipse[2]),
+                                          orientation=iris_ellipse[4])
+
+    # Sketch pupil ellipse
+    [rr_p, cc_p] = draw.ellipse_perimeter(int(pupil_ellipse[1]),
+                                          int(pupil_ellipse[0]),
+                                          int(pupil_ellipse[3]),
+                                          int(pupil_ellipse[2]),
+                                          orientation=pupil_ellipse[4])
+
+    # Clip the perimeter display incase it goes outside bounds
+    rr_i = rr_i.clip(6, image.shape[0]-6)
+    rr_p = rr_p.clip(6, image.shape[0]-6)
+    cc_i = cc_i.clip(6, image.shape[1]-6)
+    cc_p = cc_p.clip(6, image.shape[1]-6)
+
+    out_image[rr_i, cc_i, ...] = np.array([0, 0, 255])
+    out_image[rr_p, cc_p, ...] = np.array([255, 0, 0])
+
+    return out_image
+
+
+
+# Data extraction helpers
 def generateEmptyStorage(name, subset):
     '''
     This file generates an empty dictionary with

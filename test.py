@@ -127,8 +127,8 @@ if __name__ == '__main__':
             latent_pupil_center = elOut[:, 0:2].detach().cpu().numpy()
             latent_iris_center  = elOut[:, 5:7].detach().cpu().numpy()
 
-            _, seg_pupil_center = get_seg2ptLoss(output[:, 2, ...].cpu(), pupil_center)
-            _, seg_iris_center  = get_seg2ptLoss(-output[:, 0, ...].cpu(), iris_center)
+            _, seg_pupil_center = get_seg2ptLoss(output[:, 2, ...].cpu(), pupil_center, temperature=4)
+            _, seg_iris_center  = get_seg2ptLoss(-output[:, 0, ...].cpu(), iris_center, temperature=4)
 
             loss = loss if args.useMultiGPU else loss.mean()
 
@@ -166,7 +166,7 @@ if __name__ == '__main__':
             dists_pupil_latent.append(latent_pupil_dist)
             dists_iris_latent.append(latent_iris_dist)
             dists_pupil_seg.append(seg_pupil_dist)
-            dists_iris_latent.append(seg_iris_dist)
+            dists_iris_seg.append(seg_iris_dist)
 
             ious.append(iou)
 
@@ -226,14 +226,14 @@ if __name__ == '__main__':
         ious = np.stack(ious, axis=0)
         ious = np.nanmean(ious, axis=0)
         print('mIoU: {}. IoUs: {}'.format(np.mean(ious), ious))
-        print('Latent space pupil distance: {}, STD: {}'.format(np.nanmean(dists_pupil_latent),
-                                                                np.nanstd(dists_pupil_latent)))
-        print('Segmentation pupil distance: {}, STD: {}'.format(np.mean(dists_pupil_seg),
-                                                                np.nanstd(dists_pupil_seg)))
-        print('Latent space iris distance: {}, STD: {}'.format(np.nanmean(dists_iris_latent),
-                                                               np.nanstd(dists_iris_latent)))
-        print('Segmentation iris distance: {}, STD: {}'.format(np.mean(dists_iris_seg),
-                                                               np.nanstd(dists_iris_seg)))
+        print('Latent space PUPIL dist. Med: {}, STD: {}'.format(np.nanmedian(dists_pupil_latent),
+                                                            np.nanstd(dists_pupil_latent)))
+        print('Segmentation PUPIL dist. Med: {}, STD: {}'.format(np.nanmedian(dists_pupil_seg),
+                                                            np.nanstd(dists_pupil_seg)))
+        print('Latent space IRIS dist. Med: {}, STD: {}'.format(np.nanmedian(dists_iris_latent),
+                                                           np.nanstd(dists_iris_latent)))
+        print('Segmentation IRIS dist. Med: {}, STD: {}'.format(np.nanmedian(dists_iris_seg),
+                                                           np.nanstd(dists_iris_seg)))
 
         print('--- Saving output directory ---')
         f = open(os.path.join(path2op, 'opDict.pkl'), 'wb')
