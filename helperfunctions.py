@@ -441,8 +441,9 @@ def linVal(x, xlims, ylims, offset):
         y = (np.diff(ylims)/np.diff(xlims))*(x - offset)
         return y.item()
 
-def getValidPoints(LabelMat):
+def getValidPoints(LabelMat, isPartSeg=True):
     '''
+    RK: This can only be used specifically for PartSeg
     Given labels, identify pupil and iris points.
     pupil: label == 3, iris: label ==2
     '''
@@ -454,7 +455,10 @@ def getValidPoints(LabelMat):
     for loc in zip(c, r):
         temp = LabelMat[loc[1]-1:loc[1]+2, loc[0]-1:loc[0]+2]
         condPupil = np.any(temp == 0) or np.any(temp == 1) or temp.size==0 # Not a valid pupil point
-        condIris = np.any(temp == 0) or np.any(temp == 3) or temp.size==0
+        if isPartSeg:
+            condIris = np.any(temp == 0) or np.any(temp == 3) or temp.size==0
+        else:
+            condIris = np.any(temp == 3) or temp.size==0
         pupilPts.append(np.array(loc)) if not condPupil else None
         irisPts.append(np.array(loc)) if not condIris else None
     pupilPts = np.stack(pupilPts, axis=0) if len(pupilPts) > 0 else []

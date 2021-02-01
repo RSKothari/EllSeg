@@ -23,7 +23,7 @@ Trained on:
 To ensure stable training, starred models * were initialized with weights from a network pretrained on OpenEDS+NVGaze+RITEyes for 2 epochs. To replicate results on starred * sets,  please initialize with the following pretrained weights.
 
 # Try it out on your eye videos!
-For quick inference on your own eye videos, please use `evaluate_ellseg.py` as `python evaluate_ellseg --path_dir=${PATH_EYE_VIDEOS}`. This scripts expects eye videos in the following folder hierarchy (at most two eye videos under one experiment - this follows the PupilLabs format).
+For quick inference on your own eye videos, please use `evaluate_ellseg.py` as `python evaluate_ellseg --path_dir=${PATH_EYE_VIDEOS}`. 
 
 * `${path_eye_videos}`
 	* exp_name_0 (can be anything)
@@ -32,6 +32,7 @@ For quick inference on your own eye videos, please use `evaluate_ellseg.py` as `
 	* exp_name_1
 		* eye0.mp4
 
+To visualize the output by ellipse fitting on the segmentation map, you can modify as `python evaluate_ellseg --path_dir=${PATH_EYE_VIDEOS} --ellseg_ellipses=0`. You may also turn outlier removal off by running the following code `python evaluate_ellseg --path_dir=${PATH_EYE_VIDEOS} --ellseg_ellipses=0 --skip_ransac=1`.
 
 # Pupil Labs integration
 Coming soon! 

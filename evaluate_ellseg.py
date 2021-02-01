@@ -9,6 +9,7 @@ Created on Fri Jan 29 03:34:22 2021
 import os
 import sys
 import cv2
+import copy
 import torch
 import argparse
 import numpy as np
@@ -21,7 +22,8 @@ from pprint import pprint
 
 from utils import get_predictions
 from modelSummary import model_dict
-from helperfunctions import my_ellipse, plot_segmap_ellpreds
+from helperfunctions import plot_segmap_ellpreds, getValidPoints
+from helperfunctions import ransac, ElliFit, my_ellipse
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -43,6 +45,8 @@ def parse_args():
                         help='process video with a certain string in filename')
     parser.add_argument('--ellseg_ellipses', type=int, default=1,
                         help='use ellseg proposed ellipses, if FALSE, it will fit an ellipse to segmentation mask')
+    parser.add_argument('--skip_ransac', type=int, default=0,
+                        help='if using ElliFit, it skips outlier removal')
 
     args = parser.parse_args()
     opt = vars(args)
@@ -101,7 +105,7 @@ def evaluate_ellseg_on_image(frame, model):
 
     seg_out, elOut, latent = seg_out.cpu(), elOut.squeeze().cpu(), latent.squeeze().cpu()
 
-    seg_map = get_predictions(seg_out).squeeze()
+    seg_map = get_predictions(seg_out).squeeze().numpy()
 
     if args.ellseg_ellipses:
         # Get EllSeg proposed ellipse predictions
@@ -122,9 +126,39 @@ def evaluate_ellseg_on_image(frame, model):
         iris_ellipse  = my_ellipse(norm_iris_ellipse.numpy()).transform(H)[0][:-1]
     else:
         # Get ElliFit derived ellipse fits from segmentation mask
-        sys.exist('To be implemented')
 
-    return seg_map.numpy(), latent.cpu().numpy(), pupil_ellipse, iris_ellipse
+        seg_map_temp = copy.deepcopy(seg_map)
+        seg_map_temp[seg_map_temp==2] += 1 # Pupil by PartSeg standard is 3
+        seg_map_temp[seg_map_temp==1] += 1 # Iris by PartSeg standard is 2
+
+        pupilPts, irisPts = getValidPoints(seg_map_temp, isPartSeg=False)
+
+        if np.sum(seg_map_temp == 3) > 50 and type(pupilPts) is not list:
+            if args.skip_ransac:
+                model_pupil = ElliFit(**{'data': pupilPts})
+            else:
+                model_pupil = ransac(pupilPts, ElliFit, 15, 40, 5e-3, 15).loop()
+        else:
+            print('Not enough pupil points')
+            model_pupil = type('model', (object, ), {})
+            model_pupil.model = np.array([-1, -1, -1, -1, -1])
+
+        if np.sum(seg_map_temp == 2) > 50 and type(irisPts) is not list:
+            if args.skip_ransac:
+                model_iris = ElliFit(**{'data': irisPts})
+            else:
+                model_iris = ransac(irisPts, ElliFit, 15, 40, 5e-3, 15).loop()
+        else:
+            print('Not enough iris points')
+            model_iris = type('model', (object, ), {})
+            model_iris.model = np.array([-1, -1, -1, -1, -1])
+            model_iris.Phi = np.array([-1, -1, -1, -1, -1])
+            # iris_fit_error = np.inf
+
+        pupil_ellipse = np.array(model_pupil.model)
+        iris_ellipse = np.array(model_iris.model)
+
+    return seg_map, latent.cpu().numpy(), pupil_ellipse, iris_ellipse
 
 #%% Rescale operation to bring segmap, pupil and iris ellipses back to original res
 def rescale_to_original(seg_map, pupil_ellipse, iris_ellipse, scale_shift, orig_shape):
