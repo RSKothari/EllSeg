@@ -209,6 +209,9 @@ def evaluate_ellseg_per_video(path_vid, args, model):
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     vid_out = cv2.VideoWriter(path_vid_out, fourcc, int(FR), (int(W), int(H)))
 
+    # Dictionary to save output ellipses
+    ellipse_out_dict = {}
+
     ret = True
     pbar = tqdm(total=FR_COUNT)
 
@@ -226,11 +229,18 @@ def evaluate_ellseg_per_video(path_vid, args, model):
         seg_map, latent, pupil_ellipse, iris_ellipse = evaluate_ellseg_on_image(input_tensor, model)
 
         # Return ellipse predictions back to original dimensions
-        seg_map, pupil_ellipse, iris_ellipse = rescale_to_original(seg_map, pupil_ellipse, iris_ellipse, scale_shift, frame.shape)
+        seg_map, pupil_ellipse, iris_ellipse = rescale_to_original(seg_map,
+                                                                   pupil_ellipse,
+                                                                   iris_ellipse,
+                                                                   scale_shift,
+                                                                   frame.shape)
 
         # Generate visuals
         frame_overlayed_with_op = plot_segmap_ellpreds(frame, seg_map, pupil_ellipse, iris_ellipse)
         vid_out.write(frame_overlayed_with_op[..., ::-1])
+
+        # Append to dictionary
+        ellipse_out_dict[counter] = {'pupil': pupil_ellipse, 'iris': iris_ellipse}
 
         pbar.update(1)
         counter+=1
@@ -238,6 +248,9 @@ def evaluate_ellseg_per_video(path_vid, args, model):
     vid_out.close()
     vid_obj.close()
     pbar.close()
+
+    # Save out ellipse dictionary
+    np.save(os.path.join(path_dir, file_name+'_pred.npy'), ellipse_out_dict)
 
     return True
 
