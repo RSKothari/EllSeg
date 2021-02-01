@@ -39,12 +39,12 @@ You may also turn outlier removal off by running the following code `python eval
 Note the other flags and their (default values)
 
 
-* vid_ext (mp4) - Look out for videos with user decided extension
-* save_maps (False) - Save out segmentation output maps as H5 files (coming soon!)
-* save_overlay (True) - Save out segmentation output map on eye video
-* eval_on_cpu (False) - If no GPU available or found, EllSeg can also be evaluated using CPU
-* load_file (./weights/all.git_ok) - Choose a weight configuration. Default is *all* which was trained on a combination of all available datasets 
-* check_for_string_in_fname ('') - Only evaluate on videos with a user defined string. Example `--check_for_string_in_fname=eye` will evaluate on eye videos only
+* `--vid_ext` (mp4) - Look out for videos with user decided extension
+* `--save_maps` (False) - Save out segmentation output maps as H5 files (coming soon!)
+* `--save_overlay` (True) - Save out segmentation output map on eye video
+* `--eval_on_cpu` (False) - If no GPU available or found, EllSeg can also be evaluated using CPU
+* `--load_file` (./weights/all.git_ok) - Choose a weight configuration. Default is *all* which was trained on a combination of all available datasets 
+* `--check_for_string_in_fname` ('') - Only evaluate on videos with a user defined string. Example `--check_for_string_in_fname=eye` will evaluate on eye videos only
 
 # Try it out on your eye images!
 Coming soon!
