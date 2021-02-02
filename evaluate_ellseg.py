@@ -85,6 +85,8 @@ def preprocess_frame(img, op_shape, align_width=True):
 
             else:
                 scale_shift = (sc, 0)
+        else:
+            scale_shift = (1, 0)
     else:
         sys.exit('Height alignment not implemented! Exiting ...')
 
@@ -221,6 +223,12 @@ def evaluate_ellseg_per_video(path_vid, args, model):
 
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
+        if frame.max() < 20:
+            # Frame is quite dark, skip processing this frame.
+            print('Skipping frame: {}'.format(counter))
+            ellipse_out_dict[counter] = {'pupil': -1*np.ones(5, ), 'iris': -1*np.ones(5, )}
+            continue
+
         frame_scaled_shifted, scale_shift = preprocess_frame(frame, (240, 320), args.align_width)
 
         input_tensor = frame_scaled_shifted.unsqueeze(0).to(device)
@@ -245,8 +253,8 @@ def evaluate_ellseg_per_video(path_vid, args, model):
         pbar.update(1)
         counter+=1
 
-    vid_out.close()
-    vid_obj.close()
+    vid_out.release()
+    vid_obj.release()
     pbar.close()
 
     # Save out ellipse dictionary
