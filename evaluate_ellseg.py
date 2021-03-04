@@ -43,7 +43,7 @@ def parse_args():
                         help='evaluate using CPU instead of GPU')
     parser.add_argument('--check_for_string_in_fname', type=str, default='',
                         help='process video with a certain string in filename')
-    parser.add_argument('--ellseg_ellipses', type=int, default=1,
+    parser.add_argument('--ellseg_ellipses', type=int, default=-1,
                         help='use ellseg proposed ellipses, if FALSE, it will fit an ellipse to segmentation mask')
     parser.add_argument('--skip_ransac', type=int, default=0,
                         help='if using ElliFit, it skips outlier removal')
@@ -69,7 +69,7 @@ def preprocess_frame(img, op_shape, align_width=True):
                 # Vertically pad array
                 pad_width = op_shape[0] - img.shape[0]
                 if pad_width%2 == 0:
-                    img = np.pad(img, ((pad_width/2, pad_width/2), (0, 0)))
+                    img = np.pad(img, ((pad_width//2, pad_width//2), (0, 0)))
                 else:
                     img = np.pad(img, ((np.floor(pad_width/2), np.ceil(pad_width/2)), (0, 0)))
                 scale_shift = (sc, pad_width)
@@ -109,7 +109,11 @@ def evaluate_ellseg_on_image(frame, model):
 
     seg_map = get_predictions(seg_out).squeeze().numpy()
 
-    if args.ellseg_ellipses:
+    ellipse_from_network = 1 if args.ellseg_ellipses == 1 else 0
+    ellipse_from_output = 1 if args.ellseg_ellipses == 0 else 0
+    no_ellipse = 1 if args.ellseg_ellipses == -1 else 0
+
+    if ellipse_from_network:
         # Get EllSeg proposed ellipse predictions
         # Ellipse Centers -> derived from segmentation output
         # Ellipse axes and orientation -> Derived from latent space
@@ -126,7 +130,8 @@ def evaluate_ellseg_on_image(frame, model):
 
         pupil_ellipse = my_ellipse(norm_pupil_ellipse.numpy()).transform(H)[0][:-1]
         iris_ellipse  = my_ellipse(norm_iris_ellipse.numpy()).transform(H)[0][:-1]
-    else:
+
+    if ellipse_from_output:
         # Get ElliFit derived ellipse fits from segmentation mask
 
         seg_map_temp = copy.deepcopy(seg_map)
@@ -160,25 +165,29 @@ def evaluate_ellseg_on_image(frame, model):
         pupil_ellipse = np.array(model_pupil.model)
         iris_ellipse = np.array(model_iris.model)
 
+    if no_ellipse:
+        pupil_ellipse = np.array([-1, -1, -1, -1, -1])
+        iris_ellipse = np.array([-1, -1, -1, -1, -1])
+
     return seg_map, latent.cpu().numpy(), pupil_ellipse, iris_ellipse
 
 #%% Rescale operation to bring segmap, pupil and iris ellipses back to original res
 def rescale_to_original(seg_map, pupil_ellipse, iris_ellipse, scale_shift, orig_shape):
 
     # Fix pupil ellipse
-    pupil_ellipse[1] = pupil_ellipse[1] - np.floor(scale_shift[1]/2)
+    pupil_ellipse[1] = pupil_ellipse[1] - np.floor(scale_shift[1]//2)
     pupil_ellipse[:-1] = pupil_ellipse[:-1]*(1/scale_shift[0])
 
     # Fix iris ellipse
-    iris_ellipse[1] = iris_ellipse[1] - np.floor(scale_shift[1]/2)
+    iris_ellipse[1] = iris_ellipse[1] - np.floor(scale_shift[1]//2)
     iris_ellipse[:-1] = iris_ellipse[:-1]*(1/scale_shift[0])
 
     if scale_shift[1] < 0:
         # Pad background
-        seg_map = np.pad(seg_map, ((-scale_shift[1]/2, -scale_shift[1]/2), (0, 0)))
+        seg_map = np.pad(seg_map, ((-scale_shift[1]//2, -scale_shift[1]//2), (0, 0)))
     elif scale_shift[1] > 0:
         # Remove extra pixels
-        seg_map = seg_map[scale_shift[1]/2:-scale_shift[1]/2, ...]
+        seg_map = seg_map[scale_shift[1]//2:-scale_shift[1]//2, ...]
 
     seg_map = cv2.resize(seg_map, (orig_shape[1], orig_shape[0]), interpolation=cv2.INTER_NEAREST)
 

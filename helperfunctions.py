@@ -534,27 +534,27 @@ def plot_segmap_ellpreds(image, seg_map, pupil_ellipse, iris_ellipse):
     out_image[..., 1] = out_image[..., 1] + 100*loc_pupil*loc_image_non_sat
 
     # Sketch iris ellipse
-    [rr_i, cc_i] = draw.ellipse_perimeter(int(iris_ellipse[1]),
-                                          int(iris_ellipse[0]),
-                                          int(iris_ellipse[3]),
-                                          int(iris_ellipse[2]),
-                                          orientation=iris_ellipse[4])
+    if not np.all(iris_ellipse==-1):
+        [rr_i, cc_i] = draw.ellipse_perimeter(int(iris_ellipse[1]),
+                                              int(iris_ellipse[0]),
+                                              int(iris_ellipse[3]),
+                                              int(iris_ellipse[2]),
+                                              orientation=iris_ellipse[4])
+        rr_i = rr_i.clip(6, image.shape[0]-6)
+        cc_i = cc_i.clip(6, image.shape[1]-6)
+        out_image[rr_i, cc_i, ...] = np.array([0, 0, 255])
 
-    # Sketch pupil ellipse
-    [rr_p, cc_p] = draw.ellipse_perimeter(int(pupil_ellipse[1]),
-                                          int(pupil_ellipse[0]),
-                                          int(pupil_ellipse[3]),
-                                          int(pupil_ellipse[2]),
-                                          orientation=pupil_ellipse[4])
+    if not np.all(pupil_ellipse==-1):
+        # Sketch pupil ellipse
+        [rr_p, cc_p] = draw.ellipse_perimeter(int(pupil_ellipse[1]),
+                                              int(pupil_ellipse[0]),
+                                              int(pupil_ellipse[3]),
+                                              int(pupil_ellipse[2]),
+                                              orientation=pupil_ellipse[4])
 
-    # Clip the perimeter display incase it goes outside bounds
-    rr_i = rr_i.clip(6, image.shape[0]-6)
-    rr_p = rr_p.clip(6, image.shape[0]-6)
-    cc_i = cc_i.clip(6, image.shape[1]-6)
-    cc_p = cc_p.clip(6, image.shape[1]-6)
-
-    out_image[rr_i, cc_i, ...] = np.array([0, 0, 255])
-    out_image[rr_p, cc_p, ...] = np.array([255, 0, 0])
+        rr_p = rr_p.clip(6, image.shape[0]-6)
+        cc_p = cc_p.clip(6, image.shape[1]-6)
+        out_image[rr_p, cc_p, ...] = np.array([255, 0, 0])
 
     return out_image
 
