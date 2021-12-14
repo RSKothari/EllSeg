@@ -1,5 +1,8 @@
 # EllSeg: An Ellipse Segmentation Framework for Robust Gaze Tracking
 
+PLEASE USE OTHER INTERNAL REPOSITORY FOUND [HERE](https://bitbucket.org/RSKothari/ellseg/src/master/).
+
+
 Please click the image to view video
 
 [![Promotional image](./figures/promotional_image.jpg)](https://youtu.be/rRhHXb-R-E8?t=7)
